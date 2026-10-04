@@ -41,6 +41,7 @@ class HabitResponse(BaseModel):
     name: str
     frequency: str
     category: str
+    checked_in_today: bool = False
 
     class Config:
         from_attributes = True

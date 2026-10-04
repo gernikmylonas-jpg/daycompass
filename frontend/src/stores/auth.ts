@@ -37,6 +37,11 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
   }
+    async function refreshUser() {
+    const { data } = await api.get<User>('/api/auth/me')
+    user.value = data
+    localStorage.setItem('user', JSON.stringify(data))
+  }
 
-  return { token, user, isLoggedIn, login, register, logout }
-})
+  return { token, user, isLoggedIn, login, register, logout, refreshUser }
+  })

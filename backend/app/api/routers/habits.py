@@ -29,8 +29,24 @@ def create_habit(payload: HabitCreate, user_id: str = Depends(get_current_user_i
 
 @router.get("", response_model=list[HabitResponse])
 def list_habits(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    return db.query(Habit).filter(Habit.user_id == user_id).all()
-
+    habits = db.query(Habit).filter(Habit.user_id == user_id).all()
+    checked_ids = {
+        c.habit_id
+        for c in db.query(CheckIn).filter(
+            CheckIn.habit_id.in_([h.id for h in habits]),
+            CheckIn.check_date == date.today(),
+        )
+    }
+    return [
+        HabitResponse(
+            id=h.id,
+            name=h.name,
+            frequency=h.frequency,
+            category=h.category.value,
+            checked_in_today=h.id in checked_ids,
+        )
+        for h in habits
+    ]
 
 @router.delete("/{habit_id}")
 def delete_habit(habit_id: UUID, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):

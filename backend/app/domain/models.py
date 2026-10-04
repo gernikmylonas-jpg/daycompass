@@ -32,12 +32,11 @@ class Habit(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     name = Column(String, nullable=False)
-    frequency = Column(String, nullable=False)  # "daily" | "weekly"
+    frequency = Column(String, nullable=False)
     category = Column(Enum(HabitCategory), nullable=False, default=HabitCategory.BODY)
 
     user = relationship("User", back_populates="habits")
-    check_ins = relationship("CheckIn", back_populates="habit")
-
+    check_ins = relationship("CheckIn", back_populates="habit", cascade="all, delete-orphan")
 
 class CheckIn(Base):
     __tablename__ = "check_ins"

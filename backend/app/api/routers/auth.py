@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db
-from app.infrastructure.security import hash_password, verify_password, create_access_token
+from app.infrastructure.security import hash_password, verify_password, create_access_token, get_current_user_id
 from app.domain.models import User
-from app.application.schemas import RegisterRequest, LoginRequest, AuthResponse
-
+from app.application.schemas import RegisterRequest, LoginRequest, AuthResponse, UserResponse
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/register", response_model=AuthResponse)
@@ -33,3 +32,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     token = create_access_token(str(user.id))
     return AuthResponse(token=token, user=user)
+
+@router.get("/me", response_model=UserResponse)
+def me(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
