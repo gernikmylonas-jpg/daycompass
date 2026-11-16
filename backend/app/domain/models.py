@@ -1,7 +1,7 @@
 import uuid
 import enum
-from datetime import date
-from sqlalchemy import Column, String, Integer, Date, Boolean, ForeignKey, Enum, Text, Float
+from datetime import date, datetime
+from sqlalchemy import Column, String, Integer, Date, Boolean, ForeignKey, Enum, Text, Float, DateTime, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.infrastructure.database import Base
@@ -71,3 +71,39 @@ class JournalEntry(Base):
     entry_date = Column(Date, nullable=False, default=date.today)
     content = Column(Text, nullable=False)
     mood = Column(String, nullable=True)  # π.χ. "good" | "neutral" | "bad"
+
+
+# ─── Δύση: Pomodoro ─────────────────────────────────────
+
+class PomodoroSession(Base):
+    __tablename__ = "pomodoro_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    kind = Column(String, nullable=False)  # "work" | "reading"
+    title = Column(String, nullable=True)
+    duration_minutes = Column(Integer, nullable=False)
+    session_date = Column(Date, nullable=False, default=date.today)
+    completed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+# ─── Κέντρο: Badges ─────────────────────────────────────
+
+class Badge(Base):
+    __tablename__ = "badges"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    code = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=False)
+    icon = Column(String, nullable=False)
+
+
+class UserBadge(Base):
+    __tablename__ = "user_badges"
+    __table_args__ = (UniqueConstraint("user_id", "badge_id", name="uq_user_badge"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    badge_id = Column(UUID(as_uuid=True), ForeignKey("badges.id"), nullable=False)
+    awarded_at = Column(DateTime, nullable=False, default=datetime.utcnow)

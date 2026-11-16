@@ -1,10 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.infrastructure.database import Base, engine
+from app.infrastructure.database import Base, engine, SessionLocal
 from app.domain import models
-from app.api.routers import auth, habits
+from app.api.routers import auth, habits, stats, pomodoro, badges
+from app.application.services.badges import seed_badges
 
 Base.metadata.create_all(bind=engine)
+
+with SessionLocal() as _db:
+    seed_badges(_db)
 
 app = FastAPI(title="DayCompass API")
 
@@ -17,6 +21,10 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(habits.router)
+app.include_router(stats.router)
+app.include_router(pomodoro.router)
+app.include_router(badges.router)
+
 
 @app.get("/")
 def root():
