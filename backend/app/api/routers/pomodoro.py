@@ -7,11 +7,11 @@ from app.infrastructure.security import get_current_user_id
 from app.domain.models import PomodoroSession, User
 from app.application.schemas import PomodoroCreate, PomodoroResponse, PomodoroSummary, BadgeInfo
 from app.application.services.badges import award_badges
+from app.application.services.points import POINTS_PER_POMODORO
 
 router = APIRouter(prefix="/api/pomodoro", tags=["pomodoro"])
 
 KINDS = {"work", "reading"}
-POINTS_PER_POMODORO = 5
 MAX_TITLE_LENGTH = 100
 
 

@@ -11,6 +11,7 @@ from app.application.schemas import (
 )
 from app.application.services.streaks import compute_streaks
 from app.application.services.badges import award_badges
+from app.application.services.points import POINTS_PER_CHECK_IN
 
 router = APIRouter(prefix="/api/habits", tags=["habits"])
 
@@ -144,7 +145,7 @@ def check_in(habit_id: UUID, user_id: str = Depends(get_current_user_id), db: Se
     db.add(check_in_entry)
 
     user = habit.user
-    user.total_points += 10
+    user.total_points += POINTS_PER_CHECK_IN
 
     new_badges = award_badges(db, user_id)
 

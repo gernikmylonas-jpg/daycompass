@@ -55,9 +55,9 @@
 
 ## Φάση 6 — Groups & Challenges
 
-- [ ] Μοντέλα `Group`, `GroupMember`
-- [ ] Δημιουργία/συμμετοχή σε group
-- [ ] Static leaderboard (top χρήστες ανά group)
+- [x] Μοντέλα `Group`, `GroupMember`
+- [x] Δημιουργία/συμμετοχή σε group
+- [x] Static leaderboard (top χρήστες ανά group)
 
 ## Φάση 7 — Real-time Leaderboard
 

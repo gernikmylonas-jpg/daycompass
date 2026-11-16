@@ -117,3 +117,40 @@ class PomodoroSummary(BaseModel):
     total_minutes: int
     total_sessions: int
     recent: list[PomodoroResponse]
+
+
+class GroupCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class GroupJoin(BaseModel):
+    invite_code: str
+
+
+class GroupSummary(BaseModel):
+    id: UUID
+    name: str
+    description: Optional[str] = None
+    invite_code: str
+    is_owner: bool
+    member_count: int
+    my_rank: int
+
+
+class LeaderboardEntry(BaseModel):
+    rank: int
+    user_id: UUID
+    name: str
+    points: int
+    is_me: bool
+
+
+class GroupDetail(BaseModel):
+    id: UUID
+    name: str
+    description: Optional[str] = None
+    invite_code: str
+    is_owner: bool
+    period: str
+    leaderboard: list[LeaderboardEntry]

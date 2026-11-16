@@ -159,6 +159,7 @@ onMounted(async () => {
         <h1 class="text-2xl font-bold text-slate-800">DayCompass</h1>
         <div class="flex items-center gap-4">
           <RouterLink to="/pomodoro" class="text-slate-600 text-sm hover:text-slate-900 underline">Pomodoro</RouterLink>
+          <RouterLink to="/groups" class="text-slate-600 text-sm hover:text-slate-900 underline">Groups</RouterLink>
           <RouterLink to="/calendar" class="text-slate-600 text-sm hover:text-slate-900 underline">Ημερολόγιο</RouterLink>
           <span class="text-slate-600 text-sm">{{ auth.user?.name }}</span>
           <button @click="logout"
