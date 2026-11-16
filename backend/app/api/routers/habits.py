@@ -12,6 +12,7 @@ from app.application.schemas import (
 from app.application.services.streaks import compute_streaks
 from app.application.services.badges import award_badges
 from app.application.services.points import POINTS_PER_CHECK_IN
+from app.application.services.realtime import notify_user_groups
 
 router = APIRouter(prefix="/api/habits", tags=["habits"])
 
@@ -151,6 +152,7 @@ def check_in(habit_id: UUID, user_id: str = Depends(get_current_user_id), db: Se
 
     db.commit()
     db.refresh(check_in_entry)
+    notify_user_groups(db, user_id)
     return CheckInResponse(
         id=check_in_entry.id,
         habit_id=check_in_entry.habit_id,

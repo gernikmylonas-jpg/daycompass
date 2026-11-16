@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import axios from 'axios'
 import api from '../api'
@@ -40,6 +40,7 @@ const newDescription = ref('')
 const joinCode = ref('')
 const error = ref('')
 const copied = ref(false)
+const live = ref<'connecting' | 'live' | 'offline'>('offline')
 
 const medals = ['🥇', '🥈', '🥉']
 const selectedId = computed(() => selected.value?.id ?? null)
@@ -48,6 +49,103 @@ function showError(e: unknown) {
   error.value = axios.isAxiosError(e)
     ? (e.response?.data?.detail ?? 'Κάτι πήγε στραβά')
     : 'Κάτι πήγε στραβά'
+}
+
+const WS_BASE = String(api.defaults.baseURL).replace(/^http/, 'ws')
+const MAX_BACKOFF_MS = 15000
+const PING_MS = 25000
+
+let socket: WebSocket | null = null
+let socketGroupId: string | null = null
+let retryTimer: number | undefined
+let pingTimer: number | undefined
+let refreshTimer: number | undefined
+let attempt = 0
+
+function clearTimers() {
+  window.clearTimeout(retryTimer)
+  window.clearInterval(pingTimer)
+  window.clearTimeout(refreshTimer)
+}
+
+function disconnectSocket() {
+  clearTimers()
+  socketGroupId = null
+  if (socket) {
+    socket.onclose = null
+    socket.close()
+    socket = null
+  }
+  live.value = 'offline'
+}
+
+function connectSocket(groupId: string) {
+  disconnectSocket()
+  socketGroupId = groupId
+  attempt = 0
+  openSocket()
+}
+
+function openSocket() {
+  const groupId = socketGroupId
+  const token = localStorage.getItem('token')
+  if (!groupId || !token) return
+  live.value = 'connecting'
+  const ws = new WebSocket(`${WS_BASE}/api/groups/${groupId}/ws?token=${encodeURIComponent(token)}`)
+  socket = ws
+
+  ws.onopen = () => {
+    attempt = 0
+    live.value = 'live'
+    // A change may have happened while we were disconnected.
+    refreshSelected()
+    window.clearInterval(pingTimer)
+    pingTimer = window.setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) ws.send('ping')
+    }, PING_MS)
+  }
+
+  ws.onmessage = (ev) => {
+    let msg: { type?: string; group_id?: string }
+    try {
+      msg = JSON.parse(ev.data)
+    } catch {
+      return
+    }
+    if (msg.group_id !== socketGroupId) return
+    if (msg.type === 'group_deleted') {
+      disconnectSocket()
+      selected.value = null
+      loadGroups()
+    } else {
+      // Debounce bursts of events into a single refetch.
+      window.clearTimeout(refreshTimer)
+      refreshTimer = window.setTimeout(refreshSelected, 150)
+    }
+  }
+
+  ws.onclose = (ev) => {
+    window.clearInterval(pingTimer)
+    live.value = 'offline'
+    if (socket !== ws) return
+    socket = null
+    if (ev.code === 4401 || ev.code === 4404) return // auth/membership problem: retrying won't help
+    const delay = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** attempt)
+    attempt += 1
+    retryTimer = window.setTimeout(openSocket, delay)
+  }
+}
+
+async function refreshSelected() {
+  const id = socketGroupId
+  if (!id) return
+  try {
+    const { data } = await api.get<GroupDetail>(`/api/groups/${id}`, { params: { period: period.value } })
+    if (socketGroupId === id) selected.value = data
+    loadGroups()
+  } catch {
+    // transient failure; the next event or reconnect will refresh again
+  }
 }
 
 async function loadGroups() {
@@ -64,7 +162,9 @@ async function openGroup(id: string) {
   error.value = ''
   try {
     const { data } = await api.get<GroupDetail>(`/api/groups/${id}`, { params: { period: period.value } })
+    const changed = selected.value?.id !== data.id
     selected.value = data
+    if (changed) connectSocket(data.id)
   } catch (e) {
     showError(e)
   }
@@ -109,6 +209,7 @@ async function leaveGroup() {
   if (!selected.value || !confirm('Να αποχωρήσεις από το group;')) return
   try {
     await api.delete(`/api/groups/${selected.value.id}/members/me`)
+    disconnectSocket()
     selected.value = null
     await loadGroups()
   } catch (e) {
@@ -120,6 +221,7 @@ async function deleteGroup() {
   if (!selected.value || !confirm('Διαγραφή του group για όλα τα μέλη;')) return
   try {
     await api.delete(`/api/groups/${selected.value.id}`)
+    disconnectSocket()
     selected.value = null
     await loadGroups()
   } catch (e) {
@@ -139,6 +241,7 @@ async function copyCode() {
 }
 
 onMounted(loadGroups)
+onUnmounted(disconnectSocket)
 </script>
 
 <template>
@@ -193,7 +296,15 @@ onMounted(loadGroups)
       <section v-if="selected" class="bg-white rounded-xl shadow p-4 border-t-4 border-amber-500 space-y-3">
         <div class="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h2 class="text-lg font-bold text-slate-800">{{ selected.name }}</h2>
+            <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+              {{ selected.name }}
+              <span :class="['text-xs font-normal flex items-center gap-1',
+                live === 'live' ? 'text-green-600' : 'text-slate-400']">
+                <span :class="['inline-block w-2 h-2 rounded-full',
+                  live === 'live' ? 'bg-green-500' : live === 'connecting' ? 'bg-amber-400' : 'bg-slate-300']"></span>
+                {{ live === 'live' ? 'live' : live === 'connecting' ? 'σύνδεση…' : 'εκτός σύνδεσης' }}
+              </span>
+            </h2>
             <p v-if="selected.description" class="text-sm text-slate-500">{{ selected.description }}</p>
           </div>
           <button @click="copyCode" title="Αντιγραφή κωδικού πρόσκλησης"

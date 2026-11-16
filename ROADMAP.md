@@ -61,9 +61,9 @@
 
 ## Φάση 7 — Real-time Leaderboard
 
-- [ ] WebSocket endpoint στο FastAPI (native υποστήριξη, δεν χρειάζεται extra library)
-- [ ] Live ενημέρωση leaderboard όταν κάποιος κάνει check-in
-- [ ] Reconnect logic στο frontend
+- [x] WebSocket endpoint στο FastAPI (native υποστήριξη, δεν χρειάζεται extra library)
+- [x] Live ενημέρωση leaderboard όταν κάποιος κάνει check-in
+- [x] Reconnect logic στο frontend
 
 ## Φάση 8 — Pomodoro Sessions
 

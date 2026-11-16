@@ -1,15 +1,16 @@
 import secrets
 import string
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
-from app.infrastructure.database import get_db
-from app.infrastructure.security import get_current_user_id
+from app.infrastructure.database import get_db, SessionLocal
+from app.infrastructure.security import get_current_user_id, decode_token
 from app.domain.models import Group, GroupMember
 from app.application.schemas import (
     GroupCreate, GroupJoin, GroupSummary, GroupDetail, LeaderboardEntry,
 )
 from app.application.services.leaderboard import group_leaderboard
+from app.application.services.realtime import hub, notify_groups
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
@@ -104,6 +105,7 @@ def join_group(payload: GroupJoin, user_id: str = Depends(get_current_user_id), 
 
     db.add(GroupMember(group_id=group.id, user_id=user_id))
     db.commit()
+    notify_groups([group.id])
     return _summary(db, group, user_id)
 
 
@@ -153,6 +155,7 @@ def leave_group(group_id: UUID, user_id: str = Depends(get_current_user_id), db:
         group.owner_id = remaining.user_id
 
     db.commit()
+    notify_groups([group.id])
     return {"detail": "Left group"}
 
 
@@ -161,6 +164,36 @@ def delete_group(group_id: UUID, user_id: str = Depends(get_current_user_id), db
     group = _get_member_group(db, group_id, user_id)
     if str(group.owner_id) != str(user_id):
         raise HTTPException(status_code=403, detail="Only the owner can delete the group")
+    group_id = group.id
     db.delete(group)
     db.commit()
+    notify_groups([group_id], "group_deleted")
     return {"detail": "Group deleted"}
+
+
+@router.websocket("/{group_id}/ws")
+async def group_updates(websocket: WebSocket, group_id: UUID, token: str = Query("")):
+    """Pushes a small 'leaderboard_changed' event; clients refetch the leaderboard over REST."""
+    # Accept first so that a rejection reaches the client as a close code (4401/4404),
+    # which it can tell apart from a network failure and therefore stop reconnecting.
+    await websocket.accept()
+    user_id = decode_token(token)
+    if user_id is None:
+        await websocket.close(code=4401)
+        return
+
+    with SessionLocal() as db:
+        is_member = _membership(db, group_id, user_id) is not None
+    if not is_member:
+        await websocket.close(code=4404)
+        return
+
+    key = str(group_id)
+    hub.add(key, websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # keep-alive pings from the client
+    except WebSocketDisconnect:
+        pass
+    finally:
+        hub.remove(key, websocket)

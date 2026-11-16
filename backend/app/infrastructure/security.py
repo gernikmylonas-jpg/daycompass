@@ -23,6 +23,14 @@ def create_access_token(user_id: str) -> str:
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
+def decode_token(token: str) -> str | None:
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except JWTError:
+        return None
+    return payload.get("sub")
+
+
 def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)) -> str:
     token = credentials.credentials
     try:

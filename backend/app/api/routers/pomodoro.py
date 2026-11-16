@@ -8,6 +8,7 @@ from app.domain.models import PomodoroSession, User
 from app.application.schemas import PomodoroCreate, PomodoroResponse, PomodoroSummary, BadgeInfo
 from app.application.services.badges import award_badges
 from app.application.services.points import POINTS_PER_POMODORO
+from app.application.services.realtime import notify_user_groups
 
 router = APIRouter(prefix="/api/pomodoro", tags=["pomodoro"])
 
@@ -47,6 +48,7 @@ def record_session(
 
     db.commit()
     db.refresh(session)
+    notify_user_groups(db, user_id)
     return PomodoroResponse(
         id=session.id,
         kind=session.kind,
