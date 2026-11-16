@@ -18,40 +18,40 @@
 
 ## Φάση 1 — Backend Θεμέλια
 
-- [ ] Δημιουργία FastAPI project (`app/` δομή: `domain/`, `application/`, `infrastructure/`, `api/`)
-- [ ] Σύνδεση με PostgreSQL (SQLAlchemy + Alembic για migrations)
+- [x] Δημιουργία FastAPI project (`app/` δομή: `domain/`, `application/`, `infrastructure/`, `api/`)
+- [x] Σύνδεση με PostgreSQL (SQLAlchemy) — ⏳ Alembic migrations λείπουν ακόμα (χρησιμοποιούμε `create_all`)
 - [ ] Docker Compose: Postgres + FastAPI container μαζί
-- [ ] Μοντέλα: `User`, `Habit`, `CheckIn`
-- [ ] JWT authentication (register/login, ίδια λογική με το προηγούμενο project)
-- [ ] Automatic API docs (FastAPI το κάνει out-of-the-box — δεν χρειάζεται Swashbuckle setup)
+- [x] Μοντέλα: `User`, `Habit`, `CheckIn`
+- [x] JWT authentication (register/login, ίδια λογική με το προηγούμενο project)
+- [x] Automatic API docs (FastAPI το κάνει out-of-the-box — δεν χρειάζεται Swashbuckle setup)
 
 ## Φάση 2 — Frontend Θεμέλια
 
-- [ ] Vite + Vue 3 + TypeScript scaffold
-- [ ] Tailwind CSS setup
-- [ ] Login/Register σελίδες
-- [ ] Auth state management (Pinia — το Vue αντίστοιχο του Context API)
-- [ ] Βασικό layout + navigation
+- [x] Vite + Vue 3 + TypeScript scaffold
+- [x] Tailwind CSS setup
+- [x] Login/Register σελίδες
+- [x] Auth state management (Pinia — το Vue αντίστοιχο του Context API)
+- [x] Βασικό layout + navigation
 
 ## Φάση 3 — Core Habit Tracking
 
-- [ ] CRUD για habits (δημιουργία, επεξεργασία, διαγραφή)
-- [ ] Καθημερινό check-in UI
-- [ ] Streak calculation (τρέχον streak + all-time best)
-- [ ] Ημερολογιακό heatmap ανά habit (GitHub-contribution-graph στυλ)
+- [x] CRUD για habits (δημιουργία, επεξεργασία, διαγραφή)
+- [x] Καθημερινό check-in UI
+- [x] Streak calculation (τρέχον streak + all-time best)
+- [x] Heatmap — συνολικό και ανά habit
 
 ## Φάση 4 — Calendar View
 
-- [ ] Ενσωμάτωση `v-calendar` (Vue-native calendar component)
-- [ ] Μηνιαία/εβδομαδιαία προβολή check-ins
-- [ ] Προβολή πολλαπλών habits στο ίδιο calendar
+- [x] Calendar component — αποφασίστηκε δικό μας (χωρίς `v-calendar`) για λιγότερες εξαρτήσεις
+- [x] Μηνιαία/εβδομαδιαία προβολή check-ins
+- [x] Προβολή πολλαπλών habits στο ίδιο calendar
 
 ## Φάση 5 — Points & Βασικό Gamification
 
-- [ ] `total_points` πεδίο στον χρήστη
-- [ ] Μηχανισμός βαθμολόγησης (πόντοι ανά check-in)
-- [ ] Πίνακας `Badge` + `UserBadge`
-- [ ] Λογική απονομής badges (π.χ. "7 μέρες συνεχόμενο streak")
+- [x] `total_points` πεδίο στον χρήστη
+- [x] Μηχανισμός βαθμολόγησης (πόντοι ανά check-in)
+- [x] Πίνακας `Badge` + `UserBadge`
+- [x] Λογική απονομής badges (π.χ. "7 μέρες συνεχόμενο streak")
 
 ## Φάση 6 — Groups & Challenges
 
@@ -67,9 +67,9 @@
 
 ## Φάση 8 — Pomodoro Sessions
 
-- [ ] Μοντέλο `PomodoroSession` (τύπος: work/reading, διάρκεια, ολοκληρώθηκε)
-- [ ] Timer UI (25/5 λεπτά ρυθμιζόμενο)
-- [ ] Ιστορικό sessions + στατιστικά
+- [x] Μοντέλο `PomodoroSession` (τύπος: work/reading, διάρκεια, ολοκληρώθηκε)
+- [x] Timer UI (25/5 λεπτά ρυθμιζόμενο)
+- [x] Ιστορικό sessions + στατιστικά
 
 ## Φάση 9 — Steps & Sleep (Χειροκίνητη Καταγραφή)
 
