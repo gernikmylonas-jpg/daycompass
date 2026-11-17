@@ -1,0 +1,422 @@
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import api from '../api'
+import { apiErrorMessage } from '../i18n/errors'
+import { intlLocale } from '../i18n'
+import DateField from './DateField.vue'
+import type { Category } from '../stores/habits'
+
+// Month / week calendar for the years 2000-2100: habit check-ins plus the user's own notes
+// (birthdays that repeat every year, reminders, events, free notes) on any day.
+
+type Kind = 'birthday' | 'reminder' | 'event' | 'note'
+
+interface CheckInEntry {
+  date: string
+  habit_id: string
+  habit_name: string
+  category: Category
+}
+
+interface CalEvent {
+  id: string
+  title: string
+  kind: Kind
+  notes: string | null
+  repeat_yearly: boolean
+  date: string
+  original_date: string
+}
+
+const MIN_YEAR = 2000
+const MAX_YEAR = 2100
+const KINDS: Kind[] = ['birthday', 'reminder', 'event', 'note']
+const KIND_ICON: Record<Kind, string> = { birthday: '🎂', reminder: '⏰', event: '📌', note: '📝' }
+const YEARS = Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i)
+
+const dotColor: Record<Category, string> = {
+  body: 'bg-teal-500',
+  work: 'bg-orange-500',
+  schedule: 'bg-pink-500',
+  mind: 'bg-purple-500',
+}
+
+const { t, locale } = useI18n()
+const loc = computed(() => intlLocale(locale.value))
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+const iso = (y: number, m: number, d: number) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+const parse = (s: string) => {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+const toIso = (d: Date) => iso(d.getFullYear(), d.getMonth() + 1, d.getDate())
+const addDays = (s: string, n: number) => {
+  const d = parse(s)
+  d.setDate(d.getDate() + n)
+  return toIso(d)
+}
+const mondayOf = (d: Date) => {
+  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  copy.setDate(copy.getDate() - ((copy.getDay() + 6) % 7))
+  return toIso(copy)
+}
+
+const now = new Date()
+const todayIso = toIso(now)
+
+const view = ref<'month' | 'week'>('month')
+const year = ref(Math.min(MAX_YEAR, Math.max(MIN_YEAR, now.getFullYear())))
+const month = ref(now.getMonth() + 1)
+const weekStart = ref(mondayOf(now))
+const entries = ref<CheckInEntry[]>([])
+const events = ref<CalEvent[]>([])
+const selected = ref<string | null>(todayIso)
+const error = ref('')
+
+// note form (add or edit)
+const form = ref<{ id: string | null; title: string; kind: Kind; notes: string; repeat: boolean; date: string } | null>(null)
+const busy = ref(false)
+
+const monthNames = computed(() => {
+  const f = new Intl.DateTimeFormat(loc.value, { month: 'long' })
+  return Array.from({ length: 12 }, (_, i) => cap(f.format(new Date(2024, i, 1))))
+})
+
+// 2024-01-01 was a Monday, so these are Monday..Sunday in the active language.
+const WEEKDAYS = computed(() => {
+  const f = new Intl.DateTimeFormat(loc.value, { weekday: 'short' })
+  return Array.from({ length: 7 }, (_, i) => cap(f.format(new Date(2024, 0, 1 + i))))
+})
+
+const byDateEntries = computed(() => {
+  const map = new Map<string, CheckInEntry[]>()
+  for (const e of entries.value) map.set(e.date, [...(map.get(e.date) ?? []), e])
+  return map
+})
+
+const byDateEvents = computed(() => {
+  const map = new Map<string, CalEvent[]>()
+  for (const e of events.value) map.set(e.date, [...(map.get(e.date) ?? []), e])
+  return map
+})
+
+const cells = computed(() => {
+  const firstWeekday = (new Date(year.value, month.value - 1, 1).getDay() + 6) % 7
+  const daysInMonth = new Date(year.value, month.value, 0).getDate()
+  const result: ({ day: number; date: string } | null)[] = []
+  for (let i = 0; i < firstWeekday; i++) result.push(null)
+  for (let d = 1; d <= daysInMonth; d++) result.push({ day: d, date: iso(year.value, month.value, d) })
+  return result
+})
+
+const weekDays = computed(() =>
+  WEEKDAYS.value.map((label, i) => {
+    const date = addDays(weekStart.value, i)
+    return { label, date, day: parse(date).getDate() }
+  }),
+)
+
+const title = computed(() => {
+  if (view.value === 'month') return `${monthNames.value[month.value - 1]} ${year.value}`
+  const short = new Intl.DateTimeFormat(loc.value, { day: 'numeric', month: 'short' })
+  const a = parse(weekStart.value)
+  const b = parse(addDays(weekStart.value, 6))
+  return `${short.format(a)} – ${short.format(b)} ${b.getFullYear()}`
+})
+
+function fullDate(s: string) {
+  const f = new Intl.DateTimeFormat(loc.value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return cap(f.format(parse(s)))
+}
+
+const selectedEntries = computed(() => (selected.value ? (byDateEntries.value.get(selected.value) ?? []) : []))
+const selectedEvents = computed(() => (selected.value ? (byDateEvents.value.get(selected.value) ?? []) : []))
+
+function currentRange(): [string, string] {
+  if (view.value === 'week') return [weekStart.value, addDays(weekStart.value, 6)]
+  const last = new Date(year.value, month.value, 0).getDate()
+  return [iso(year.value, month.value, 1), iso(year.value, month.value, last)]
+}
+
+async function load() {
+  error.value = ''
+  const [start, end] = currentRange()
+  try {
+    const [checkIns, notes] = await Promise.all([
+      api.get<CheckInEntry[]>('/api/stats/calendar-range', { params: { start, end } }),
+      api.get<CalEvent[]>('/api/calendar/events', { params: { start, end } }),
+    ])
+    entries.value = checkIns.data
+    events.value = notes.data
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  }
+}
+
+function inRange(dateIso: string) {
+  const y = parse(dateIso).getFullYear()
+  return y >= MIN_YEAR && y <= MAX_YEAR
+}
+
+const canPrev = computed(() =>
+  view.value === 'month' ? !(year.value === MIN_YEAR && month.value === 1) : inRange(addDays(weekStart.value, -7)),
+)
+const canNext = computed(() =>
+  view.value === 'month' ? !(year.value === MAX_YEAR && month.value === 12) : inRange(addDays(weekStart.value, 13)),
+)
+
+function shift(delta: number) {
+  selected.value = null
+  form.value = null
+  if (view.value === 'week') {
+    weekStart.value = addDays(weekStart.value, delta * 7)
+    return
+  }
+  let m = month.value + delta
+  let y = year.value
+  if (m < 1) { m = 12; y-- }
+  if (m > 12) { m = 1; y++ }
+  if (y < MIN_YEAR || y > MAX_YEAR) return
+  month.value = m
+  year.value = y
+}
+
+function goToday() {
+  year.value = Math.min(MAX_YEAR, Math.max(MIN_YEAR, now.getFullYear()))
+  month.value = now.getMonth() + 1
+  weekStart.value = mondayOf(now)
+  selected.value = todayIso
+}
+
+function setView(v: 'month' | 'week') {
+  if (v === view.value) return
+  form.value = null
+  if (v === 'week') {
+    const showingCurrentMonth = year.value === now.getFullYear() && month.value === now.getMonth() + 1
+    weekStart.value = showingCurrentMonth ? mondayOf(now) : mondayOf(new Date(year.value, month.value - 1, 1))
+  } else {
+    const d = parse(weekStart.value)
+    year.value = Math.min(MAX_YEAR, Math.max(MIN_YEAR, d.getFullYear()))
+    month.value = d.getMonth() + 1
+  }
+  view.value = v
+}
+
+function select(date: string) {
+  selected.value = date
+  form.value = null
+}
+
+function uniqueCategories(list: CheckInEntry[]) {
+  return [...new Set(list.map((e) => e.category))]
+}
+
+// ── notes ────────────────────────────────────────────────────────────────
+function startNew() {
+  if (!selected.value) return
+  form.value = { id: null, title: '', kind: 'note', notes: '', repeat: false, date: selected.value }
+}
+
+function startEdit(ev: CalEvent) {
+  form.value = { id: ev.id, title: ev.title, kind: ev.kind, notes: ev.notes ?? '', repeat: ev.repeat_yearly, date: ev.original_date }
+}
+
+// a birthday repeats every year by default
+watch(() => form.value?.kind, (kind) => {
+  if (form.value && !form.value.id && kind === 'birthday') form.value.repeat = true
+})
+
+async function save() {
+  const f = form.value
+  if (!f || !f.title.trim() || !f.date) return
+  busy.value = true
+  error.value = ''
+  try {
+    const payload = { title: f.title, event_date: f.date, kind: f.kind, notes: f.notes || null, repeat_yearly: f.repeat }
+    if (f.id) await api.put(`/api/calendar/events/${f.id}`, payload)
+    else await api.post('/api/calendar/events', payload)
+    form.value = null
+    await load()
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function removeEvent(ev: CalEvent) {
+  if (!confirm(t('calendar.confirmDelete'))) return
+  error.value = ''
+  try {
+    await api.delete(`/api/calendar/events/${ev.id}`)
+    await load()
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  }
+}
+
+watch([view, year, month, weekStart], load)
+onMounted(load)
+</script>
+
+<template>
+  <div class="@container space-y-4">
+    <p v-if="error" role="alert" class="text-danger text-sm">{{ error }}</p>
+
+    <section class="bg-surface rounded-xl shadow p-4 border-t-4 border-slate-400">
+      <!-- year / month pickers (2000-2100) and view switch -->
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div class="flex items-center gap-2">
+          <label class="sr-only" :for="`cal-month-${view}`">{{ t('calendar.monthLabel') }}</label>
+          <select :id="`cal-month-${view}`" v-model.number="month" :disabled="view === 'week'"
+            class="border rounded-lg px-2 py-1 text-sm">
+            <option v-for="(name, i) in monthNames" :key="i" :value="i + 1">{{ name }}</option>
+          </select>
+          <label class="sr-only" for="cal-year">{{ t('calendar.year') }}</label>
+          <select id="cal-year" v-model.number="year" :disabled="view === 'week'" class="border rounded-lg px-2 py-1 text-sm">
+            <option v-for="y in YEARS" :key="y" :value="y">{{ y }}</option>
+          </select>
+          <button type="button" @click="goToday"
+            class="border border-slate-400 text-slate-600 rounded-lg px-3 py-1 text-sm hover:bg-slate-50">
+            {{ t('calendar.today') }}
+          </button>
+        </div>
+        <div class="flex gap-2">
+          <button @click="setView('month')" :aria-pressed="view === 'month'"
+            :class="['px-3 py-1 rounded-lg text-sm', view === 'month' ? 'bg-primary text-on-primary' : 'border border-slate-400 text-slate-600 hover:bg-slate-50']">
+            {{ t('calendar.month') }}
+          </button>
+          <button @click="setView('week')" :aria-pressed="view === 'week'"
+            :class="['px-3 py-1 rounded-lg text-sm', view === 'week' ? 'bg-primary text-on-primary' : 'border border-slate-400 text-slate-600 hover:bg-slate-50']">
+            {{ t('calendar.week') }}
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between mb-3">
+        <button @click="shift(-1)" :disabled="!canPrev" :aria-label="t('calendar.prev')"
+          class="px-3 py-1 rounded-lg hover:bg-slate-100 text-slate-600 disabled:opacity-30">‹</button>
+        <h2 class="text-lg font-bold text-slate-800">{{ title }}</h2>
+        <button @click="shift(1)" :disabled="!canNext" :aria-label="t('calendar.next')"
+          class="px-3 py-1 rounded-lg hover:bg-slate-100 text-slate-600 disabled:opacity-30">›</button>
+      </div>
+
+      <template v-if="view === 'month'">
+        <div class="grid grid-cols-7 gap-1 text-center text-xs text-slate-500 mb-1">
+          <div v-for="w in WEEKDAYS" :key="w">{{ w }}</div>
+        </div>
+        <div class="grid grid-cols-7 gap-1">
+          <template v-for="(c, i) in cells" :key="i">
+            <div v-if="!c" />
+            <button v-else @click="select(c.date)" :aria-pressed="selected === c.date"
+              :aria-label="fullDate(c.date)"
+              :class="['h-14 rounded-lg border text-sm flex flex-col items-center justify-start pt-1 relative',
+                selected === c.date ? 'border-slate-800 bg-slate-50' : 'border-transparent hover:bg-slate-50',
+                c.date === todayIso ? 'font-bold text-teal-700' : 'text-slate-700']">
+              <span>{{ c.day }}</span>
+              <span v-if="byDateEvents.get(c.date)?.length" class="text-[0.7rem] leading-none mt-0.5" aria-hidden="true">
+                {{ KIND_ICON[byDateEvents.get(c.date)![0].kind] }}<span v-if="byDateEvents.get(c.date)!.length > 1" class="text-slate-500">+{{ byDateEvents.get(c.date)!.length - 1 }}</span>
+              </span>
+              <span class="flex gap-0.5 mt-1" aria-hidden="true">
+                <span v-for="cat in uniqueCategories(byDateEntries.get(c.date) ?? [])" :key="cat"
+                  :class="['w-1.5 h-1.5 rounded-full', dotColor[cat]]" />
+              </span>
+            </button>
+          </template>
+        </div>
+      </template>
+
+      <div v-else class="grid grid-cols-1 @lg:grid-cols-7 gap-2">
+        <button v-for="d in weekDays" :key="d.date" @click="select(d.date)" :aria-pressed="selected === d.date"
+          :aria-label="fullDate(d.date)"
+          :class="['text-left rounded-lg border p-2 min-h-24',
+            selected === d.date ? 'border-slate-800' : d.date === todayIso ? 'border-teal-500 bg-teal-50' : 'border-slate-200']">
+          <p :class="['text-xs mb-1', d.date === todayIso ? 'font-bold text-teal-700' : 'text-slate-500']">{{ d.label }} {{ d.day }}</p>
+          <ul class="space-y-0.5">
+            <li v-for="ev in byDateEvents.get(d.date) ?? []" :key="ev.id + d.date" class="text-xs text-slate-700 break-words">
+              <span aria-hidden="true">{{ KIND_ICON[ev.kind] }}</span> {{ ev.title }}
+            </li>
+            <li v-for="e in byDateEntries.get(d.date) ?? []" :key="e.habit_id" class="flex items-start gap-1.5 text-xs text-slate-700">
+              <span :class="['w-2 h-2 rounded-full mt-1 shrink-0', dotColor[e.category]]" aria-hidden="true" />
+              <span class="break-words">{{ e.habit_name }}</span>
+            </li>
+          </ul>
+        </button>
+      </div>
+    </section>
+
+    <!-- the chosen day: habits done, notes, and the note form -->
+    <section v-if="selected" class="bg-surface rounded-xl shadow p-4 space-y-3" aria-live="polite">
+      <div class="flex items-start justify-between gap-2">
+        <h3 class="font-bold text-slate-800">{{ fullDate(selected) }}</h3>
+        <button v-if="!form" @click="startNew"
+          class="bg-primary text-on-primary rounded-lg px-3 py-1 text-sm hover:bg-primary-hover shrink-0">
+          + {{ t('calendar.addNote') }}
+        </button>
+      </div>
+
+      <ul v-if="selectedEvents.length" class="space-y-2">
+        <li v-for="ev in selectedEvents" :key="ev.id" class="flex items-start gap-2 text-sm text-slate-700">
+          <span class="text-lg leading-none" aria-hidden="true">{{ KIND_ICON[ev.kind] }}</span>
+          <div class="flex-1 min-w-0">
+            <p class="font-medium break-words">
+              {{ ev.title }}
+              <span v-if="ev.repeat_yearly" class="text-xs font-normal text-slate-500">· {{ t('calendar.yearly') }}</span>
+            </p>
+            <p v-if="ev.notes" class="text-xs text-slate-500 break-words whitespace-pre-line">{{ ev.notes }}</p>
+          </div>
+          <button @click="startEdit(ev)" :aria-label="t('home.edit')" :title="t('home.edit')"
+            class="w-7 h-7 inline-flex items-center justify-center rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100">✎</button>
+          <button @click="removeEvent(ev)" :aria-label="t('home.remove')" :title="t('home.remove')"
+            class="w-7 h-7 inline-flex items-center justify-center rounded text-slate-500 hover:text-danger hover:bg-slate-100">✕</button>
+        </li>
+      </ul>
+
+      <ul v-if="selectedEntries.length" class="space-y-1">
+        <li v-for="e in selectedEntries" :key="e.habit_id" class="flex items-center gap-2 text-sm text-slate-700">
+          <span :class="['w-2 h-2 rounded-full', dotColor[e.category]]" aria-hidden="true" />
+          {{ e.habit_name }}
+        </li>
+      </ul>
+
+      <p v-if="!selectedEvents.length && !selectedEntries.length && !form" class="text-slate-500 text-sm">{{ t('calendar.nothing') }}</p>
+
+      <form v-if="form" @submit.prevent="save" class="space-y-2 border-t border-slate-200 pt-3">
+        <input v-model="form.title" type="text" maxlength="100" required
+          :placeholder="t('calendar.titlePlaceholder')" :aria-label="t('calendar.titlePlaceholder')"
+          class="w-full border rounded-lg px-3 py-2 text-sm" />
+        <div class="flex flex-wrap gap-2">
+          <label class="text-xs text-slate-600 flex-1 min-w-32">
+            {{ t('calendar.kind') }}
+            <select v-model="form.kind" class="mt-1 border rounded-lg px-2 py-1.5 text-sm w-full">
+              <option v-for="k in KINDS" :key="k" :value="k">{{ KIND_ICON[k] }} {{ t(`calendar.kinds.${k}`) }}</option>
+            </select>
+          </label>
+          <div class="text-xs text-slate-600 flex-1 min-w-52">
+            <span>{{ t('wellness.date') }}</span>
+            <DateField v-model="form.date" min="1900-01-01" max="2100-12-31" :label="t('wellness.date')" required class="mt-1" />
+          </div>
+        </div>
+        <textarea v-model="form.notes" rows="2" maxlength="500"
+          :placeholder="t('calendar.details')" :aria-label="t('calendar.details')"
+          class="w-full border rounded-lg px-3 py-2 text-sm"></textarea>
+        <label class="flex items-center gap-2 text-sm text-slate-700">
+          <input v-model="form.repeat" type="checkbox" class="h-4 w-4" />
+          {{ t('calendar.repeatYearly') }}
+        </label>
+        <div class="flex gap-2">
+          <button type="submit" :disabled="busy"
+            class="bg-primary text-on-primary rounded-lg px-4 py-1.5 text-sm hover:bg-primary-hover disabled:opacity-50">
+            {{ t('common.save') }}
+          </button>
+          <button type="button" @click="form = null"
+            class="border border-slate-400 text-slate-600 rounded-lg px-4 py-1.5 text-sm hover:bg-slate-50">
+            {{ t('common.cancel') }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+</template>

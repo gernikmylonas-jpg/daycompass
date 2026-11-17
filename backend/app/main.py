@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.infrastructure.database import Base, engine, SessionLocal
+from app.infrastructure.database import Base, engine, SessionLocal, ensure_columns
 from app.domain import models
-from app.api.routers import auth, habits, stats, pomodoro, badges, groups, wellness, reminders
+from app.api.routers import auth, habits, stats, pomodoro, badges, groups, wellness, reminders, settings, events, journal
 from app.application.services.badges import seed_badges
 
 Base.metadata.create_all(bind=engine)
+ensure_columns()
 
 with SessionLocal() as _db:
     seed_badges(_db)
@@ -27,6 +28,9 @@ app.include_router(badges.router)
 app.include_router(groups.router)
 app.include_router(wellness.router)
 app.include_router(reminders.router)
+app.include_router(settings.router)
+app.include_router(events.router)
+app.include_router(journal.router)
 
 
 @app.get("/")

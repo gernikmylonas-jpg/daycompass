@@ -4,7 +4,22 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>DayCompass</title>
+    <script>
+      // apply the saved theme/mode before the first paint (the app re-applies it once loaded)
+      (function () {
+        var root = document.documentElement
+        try {
+          var mode = localStorage.getItem('mode') || 'system'
+          var dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          root.dataset.theme = localStorage.getItem('theme') || 'classic'
+          root.dataset.mode = dark ? 'dark' : 'light'
+        } catch (e) {
+          root.dataset.theme = 'classic'
+          root.dataset.mode = 'light'
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

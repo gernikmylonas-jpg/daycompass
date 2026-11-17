@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { formatDate } from '../i18n/dates'
 import type { HeatmapDay } from '../stores/habits'
 
 const WEEKS = 17
 const { t } = useI18n()
 const props = defineProps<{ days: HeatmapDay[]; title?: string }>()
 const heading = computed(() => props.title ?? t('heatmap.activity'))
+const total = computed(() => props.days.reduce((sum, d) => sum + d.count, 0))
 
 function iso(d: Date) {
   const y = d.getFullYear()
@@ -43,12 +45,12 @@ function color(count: number, future: boolean) {
 </script>
 
 <template>
-  <section class="bg-white rounded-xl shadow p-4">
+  <section class="bg-surface rounded-xl shadow p-4">
     <h2 class="text-lg font-bold text-slate-800 mb-3">{{ heading }}</h2>
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto" role="img" :aria-label="`${heading}: ${t('heatmap.checkins', total)}`">
       <div class="grid grid-flow-col grid-rows-7 gap-1 w-max">
         <div v-for="c in cells" :key="c.date"
-          :title="c.future ? '' : `${c.date}: ${t('heatmap.checkins', c.count)}`"
+          :title="c.future ? '' : `${formatDate(c.date)}: ${t('heatmap.checkins', c.count)}`"
           :class="['w-3.5 h-3.5 rounded-sm', color(c.count, c.future)]" />
       </div>
     </div>

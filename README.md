@@ -48,6 +48,35 @@ Read from environment variables or `backend/.env` (never commit it).
 - **Daily reminder** — emails users who opted in (checkbox on the home page) and still have unchecked habits today. At most one email per user per day.
 - **Nightly recalculation** — grants goal points that were never awarded, re-evaluates badges, and logs any mismatch between stored points and activity history (report only; it never changes totals).
 
+## Compass styles
+
+The **Settings** menu (top right) switches between 7 compass styles and toggles the needle cursor. Choices are stored in the browser. To add a style: add a `html[data-theme="…"]` block in `frontend/src/style.css`, an entry in `THEMES` (`frontend/src/stores/settings.ts`) and its name under `settings.themes` in all four locale files.
+
+## The compass home screen
+
+The home page is a big compass with eight directions. N, E, S and W hold habits (steps & sleep sit inside N), SW is the Pomodoro timer, SE the calendar (2000–2100, with notes, birthdays and reminders), NW the groups, and NE is still reserved. Pressing a letter opens that direction's panel; the ring around each letter shows today's progress. The symbol in the middle (different for every compass style) opens points and badges. Clicking the "DayCompass" title opens a short guide.
+
+To give a reserved direction a feature, change its entry in `directions` in `frontend/src/views/HomeView.vue` (`kind: 'soon'` becomes `'habits'`, `'pomodoro'`, `'groups'`, `'calendar'` or a new kind) and add its panel next to the others.
+
+## What is inside each direction
+
+| Direction | Contents |
+|---|---|
+| N | Body habits · **Steps & sleep** (log and history) |
+| E | Schedule habits · **Calendars: Moon & eclipses** (moon phases for every day 2000–2100, solar and lunar eclipses, equinoxes/solstices, meteor showers) |
+| S | Mind habits · **Journal** (write and/or record your voice; private to your account) |
+| W | Work & study habits |
+| NW | Groups with a live leaderboard |
+| SE | Calendar 2000–2100 with notes, birthdays and reminders |
+| SW | Pomodoro timer |
+| NE | reserved |
+
+Dates are always shown day / month / year. The astronomy is computed in the browser (`frontend/src/astronomy.ts`, Meeus' *Astronomical Algorithms*); results agree with published data to about a minute. Journal recordings are stored in the database (`journal_audio`), limited to 8 MB / 10 minutes each, and are served only to their owner. `ensure_columns()` in `backend/app/infrastructure/database.py` adds columns introduced after a table was created, until Alembic migrations are set up.
+
+## Your settings follow your account
+
+Compass style, light/dark mode, the needle cursor and the language are stored on the server (`/api/settings`), so they appear on any device once you sign in. This device's copy is only used until you are signed in. Calendar notes live in `calendar_events`.
+
 ## Adding UI text
 
 Add every new string to all four files in `frontend/src/i18n/locales/`. `es`, `fr` and `el` are typed from `en.ts`, so a missing key fails `vue-tsc`.

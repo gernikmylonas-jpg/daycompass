@@ -29,6 +29,18 @@ const RULES: [RegExp, string][] = [
   [/^End date must not be before start date$/, 'endBeforeStart'],
   [/^Range is limited to (\d+) days$/, 'rangeLimited'],
   [/^Period must be /, 'periodInvalid'],
+  [/^Event not found$/, 'eventNotFound'],
+  [/^Too many events$/, 'tooManyEvents'],
+  [/^Year must be between /, 'yearRange'],
+  [/^Notes are too long \(max (\d+) characters\)$/, 'notesTooLong'],
+  [/^Invalid (theme|mode|language)$/, 'invalidSetting'],
+  [/^Entry not found$/, 'journalNotFound'],
+  [/^Write something or record audio$/, 'journalEmpty'],
+  [/^Entry is too long \(max (\d+) characters\)$/, 'journalTooLong'],
+  [/^Invalid mood$/, 'invalidMood'],
+  [/^Recording is too large/, 'audioTooLarge'],
+  [/^Unsupported audio type$/, 'audioType'],
+  [/^Recording not found$/, 'audioNotFound'],
 ]
 
 export function apiErrorMessage(e: unknown): string {

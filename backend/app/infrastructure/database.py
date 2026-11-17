@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.config import settings
 
@@ -12,3 +12,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def ensure_columns() -> None:
+    """Tiny stop-gap until Alembic migrations exist: adds columns introduced after a table was
+    first created. Every statement is idempotent."""
+    if engine.dialect.name != "postgresql":
+        return
+    statements = [
+        "ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW()",
+    ]
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))

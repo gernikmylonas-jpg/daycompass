@@ -200,3 +200,68 @@ class WellnessSummary(BaseModel):
 class ReminderSettings(BaseModel):
     enabled: bool
     language: str = "en"
+
+
+class SettingsPayload(BaseModel):
+    theme: str
+    mode: str
+    needle_cursor: bool
+    language: Optional[str] = None
+
+
+class SettingsResponse(SettingsPayload):
+    saved: bool  # False when the account has never stored settings (client keeps its local ones)
+
+
+class EventCreate(BaseModel):
+    title: str
+    event_date: date
+    kind: str = "note"
+    notes: Optional[str] = None
+    repeat_yearly: bool = False
+
+
+class EventResponse(BaseModel):
+    id: UUID
+    title: str
+    kind: str
+    notes: Optional[str] = None
+    repeat_yearly: bool
+    date: date           # the day this occurrence falls on
+    original_date: date  # the day it was created for (birthdays repeat every year)
+
+
+class PointsSource(BaseModel):
+    count: int
+    points: int
+
+
+class PointsBreakdown(BaseModel):
+    total: int
+    check_ins: PointsSource
+    pomodoros: PointsSource
+    steps: PointsSource
+    sleep: PointsSource
+    other: int  # total minus everything explained above (e.g. points kept from deleted habits)
+
+
+class JournalEntryResponse(BaseModel):
+    id: UUID
+    entry_date: date
+    content: str
+    mood: Optional[str] = None
+    created_at: datetime
+    has_audio: bool = False
+    audio_seconds: int = 0
+    audio_mime: Optional[str] = None
+
+
+class JournalPage(BaseModel):
+    entries: list[JournalEntryResponse]
+    total: int
+
+
+class JournalUpdate(BaseModel):
+    entry_date: date
+    content: str = ""
+    mood: Optional[str] = None

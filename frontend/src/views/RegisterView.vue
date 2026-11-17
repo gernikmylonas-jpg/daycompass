@@ -26,22 +26,22 @@ async function submit() {
 </script>
 
 <template>
-  <div class="min-h-[calc(100vh-3rem)] flex items-center justify-center bg-slate-100">
-    <form @submit.prevent="submit" class="bg-white p-8 rounded-xl shadow w-full max-w-sm space-y-4">
+  <div class="min-h-[calc(100vh-3rem)] flex items-center justify-center bg-page">
+    <form @submit.prevent="submit" class="bg-surface p-8 rounded-xl shadow w-full max-w-sm space-y-4">
       <h1 class="text-2xl font-bold text-slate-800">DayCompass</h1>
       <p class="text-slate-500 text-sm">{{ t('auth.registerSubtitle') }}</p>
 
-      <input v-model="name" type="text" :placeholder="t('auth.name')" required
+      <input v-model="name" type="text" :placeholder="t('auth.name')" :aria-label="t('auth.name')" required
         class="w-full border rounded-lg px-3 py-2" />
-      <input v-model="email" type="email" :placeholder="t('auth.email')" required
+      <input v-model="email" type="email" :placeholder="t('auth.email')" :aria-label="t('auth.email')" required
         class="w-full border rounded-lg px-3 py-2" />
-      <input v-model="password" type="password" :placeholder="t('auth.password')" required
+      <input v-model="password" type="password" :placeholder="t('auth.password')" :aria-label="t('auth.password')" required
         class="w-full border rounded-lg px-3 py-2" />
 
-      <p v-if="error" class="text-red-600 text-sm">{{ error }}</p>
+      <p v-if="error" role="alert" class="text-danger text-sm">{{ error }}</p>
 
       <button type="submit"
-        class="w-full bg-slate-800 text-white rounded-lg py-2 hover:bg-slate-700">
+        class="w-full bg-primary text-on-primary rounded-lg py-2 hover:bg-primary-hover">
         {{ t('auth.register') }}
       </button>
 

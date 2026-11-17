@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import date, datetime
-from sqlalchemy import Column, String, Integer, Date, Boolean, ForeignKey, Enum, Text, Float, DateTime, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Date, Boolean, ForeignKey, Enum, Text, Float, DateTime, UniqueConstraint, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.infrastructure.database import Base
@@ -69,8 +69,19 @@ class JournalEntry(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     entry_date = Column(Date, nullable=False, default=date.today)
-    content = Column(Text, nullable=False)
-    mood = Column(String, nullable=True)  # π.χ. "good" | "neutral" | "bad"
+    content = Column(Text, nullable=False, default="")
+    mood = Column(String, nullable=True)  # "good" | "neutral" | "bad"
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class JournalAudio(Base):
+    """A voice recording attached to a journal entry (stored in the database, owner-only)."""
+    __tablename__ = "journal_audio"
+
+    entry_id = Column(UUID(as_uuid=True), ForeignKey("journal_entries.id"), primary_key=True)
+    mime = Column(String, nullable=False)
+    seconds = Column(Integer, nullable=False, default=0)
+    data = Column(LargeBinary, nullable=False)
 
 
 # ─── Δύση: Pomodoro ─────────────────────────────────────
@@ -180,3 +191,31 @@ class ReminderLog(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     sent_on = Column(Date, nullable=False)
+
+
+# ─── User preferences (follow the account across devices) ───
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    theme = Column(String, nullable=False, default="classic")
+    mode = Column(String, nullable=False, default="system")  # light | dark | system
+    needle_cursor = Column(Boolean, nullable=False, default=True)
+    language = Column(String, nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+# ─── Calendar notes: birthdays, reminders, free notes ───────
+
+class CalendarEvent(Base):
+    __tablename__ = "calendar_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    event_date = Column(Date, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    kind = Column(String, nullable=False, default="note")  # birthday | reminder | event | note
+    notes = Column(Text, nullable=True)
+    repeat_yearly = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

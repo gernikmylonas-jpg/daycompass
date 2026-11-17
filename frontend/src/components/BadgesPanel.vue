@@ -22,7 +22,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="bg-white rounded-xl shadow p-4">
+  <section class="bg-surface rounded-xl shadow p-4">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-lg font-bold text-slate-800">{{ t('badges.title') }}</h2>
       <span class="text-sm text-slate-500">{{ earnedCount }} / {{ store.badges.length }}</span>

@@ -17,13 +17,13 @@ function badgeDescription(code: string, fallback: string) {
 <template>
   <div v-if="store.toasts.length" class="fixed bottom-4 right-4 space-y-2 z-50">
     <div v-for="b in store.toasts" :key="b.code"
-      class="bg-slate-800 text-white rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 cursor-pointer"
+      class="bg-primary text-on-primary rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 cursor-pointer"
       @click="store.dismiss()">
       <span class="text-2xl">{{ b.icon }}</span>
       <div>
-        <p class="text-xs text-slate-300">{{ t('badges.newBadge') }}</p>
+        <p class="text-xs opacity-75">{{ t('badges.newBadge') }}</p>
         <p class="font-bold text-sm">{{ badgeName(b.code, b.name) }}</p>
-        <p class="text-xs text-slate-300">{{ badgeDescription(b.code, b.description) }}</p>
+        <p class="text-xs opacity-75">{{ badgeDescription(b.code, b.description) }}</p>
       </div>
     </div>
   </div>

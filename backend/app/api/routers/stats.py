@@ -5,8 +5,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
-from app.domain.models import Habit, CheckIn
-from app.application.schemas import HeatmapDay, CalendarEntry
+from app.domain.models import Habit, CheckIn, PomodoroSession, StepLog, SleepLog, User
+from app.application.schemas import HeatmapDay, CalendarEntry, PointsBreakdown, PointsSource
+from app.application.services.points import POINTS_PER_CHECK_IN, POINTS_PER_POMODORO
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
@@ -78,3 +79,35 @@ def calendar_range(
     if (end - start).days + 1 > MAX_RANGE_DAYS:
         raise HTTPException(status_code=422, detail=f"Range is limited to {MAX_RANGE_DAYS} days")
     return _calendar_entries(db, user_id, start, end)
+
+
+@router.get("/points", response_model=PointsBreakdown)
+def points_breakdown(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    """Where the user's points come from. `other` is whatever the stored total has beyond the
+    activity history (points are kept when a habit is deleted)."""
+    check_ins = (
+        db.query(func.count(CheckIn.id))
+        .join(Habit, Habit.id == CheckIn.habit_id)
+        .filter(Habit.user_id == user_id, CheckIn.completed.is_(True))
+        .scalar()
+    ) or 0
+    pomodoros = db.query(func.count(PomodoroSession.id)).filter(PomodoroSession.user_id == user_id).scalar() or 0
+
+    def goal_days(model):
+        days = db.query(func.count(model.id)).filter(model.user_id == user_id, model.points_awarded > 0).scalar() or 0
+        pts = db.query(func.coalesce(func.sum(model.points_awarded), 0)).filter(model.user_id == user_id).scalar() or 0
+        return PointsSource(count=int(days), points=int(pts))
+
+    steps, sleep = goal_days(StepLog), goal_days(SleepLog)
+    total = db.query(User.total_points).filter(User.id == user_id).scalar() or 0
+    from_checkins = check_ins * POINTS_PER_CHECK_IN
+    from_pomodoros = pomodoros * POINTS_PER_POMODORO
+    explained = from_checkins + from_pomodoros + steps.points + sleep.points
+    return PointsBreakdown(
+        total=total,
+        check_ins=PointsSource(count=check_ins, points=from_checkins),
+        pomodoros=PointsSource(count=pomodoros, points=from_pomodoros),
+        steps=steps,
+        sleep=sleep,
+        other=total - explained,
+    )
