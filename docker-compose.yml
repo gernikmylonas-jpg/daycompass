@@ -1,3 +1,26 @@
+# Default (`docker compose up -d`): only the infrastructure — Postgres + Redis — and you run
+# the API / worker / frontend locally.
+# Everything in containers: `docker compose --profile full up -d --build`.
+
+x-backend: &backend
+  build: ./backend
+  profiles: ["full"]
+  environment: &backend-env
+    DATABASE_URL: postgresql://postgres:postgres@postgres:5432/daycompass
+    REDIS_URL: redis://redis:6379/0
+    JWT_SECRET: ${JWT_SECRET:-REPLACE_WITH_A_LONG_RANDOM_SECRET}
+    TZ: ${TZ:-Europe/Athens}
+    SMTP_HOST: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-587}
+    SMTP_USER: ${SMTP_USER:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    MAIL_FROM: ${MAIL_FROM:-DayCompass <no-reply@daycompass.local>}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
   postgres:
     image: postgres:16
@@ -10,6 +33,38 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d daycompass"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: daycompass-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    <<: *backend
+    container_name: daycompass-api
+    ports:
+      - "8000:8000"
+
+  worker:
+    <<: *backend
+    container_name: daycompass-worker
+    command: celery -A app.worker.celery_app worker --loglevel=info
+
+  beat:
+    <<: *backend
+    container_name: daycompass-beat
+    command: celery -A app.worker.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule
 
 volumes:
   pgdata:

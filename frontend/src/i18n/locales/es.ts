@@ -131,6 +131,10 @@ const es: Messages = {
     duration: '{h} h {m} min',
     hint: 'Alcanza los objetivos para ganar {steps} puntos por los pasos y {sleep} por el sueño, una vez al día.',
   },
+  reminders: {
+    label: 'Recordatorio diario por correo',
+    hint: 'Por la tarde, recibe un correo si aún tienes hábitos por registrar hoy.',
+  },
   badges: {
     title: 'Insignias',
     newBadge: '¡Nueva insignia!',

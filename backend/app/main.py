@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.infrastructure.database import Base, engine, SessionLocal
 from app.domain import models
-from app.api.routers import auth, habits, stats, pomodoro, badges, groups, wellness
+from app.api.routers import auth, habits, stats, pomodoro, badges, groups, wellness, reminders
 from app.application.services.badges import seed_badges
 
 Base.metadata.create_all(bind=engine)
@@ -26,6 +26,7 @@ app.include_router(pomodoro.router)
 app.include_router(badges.router)
 app.include_router(groups.router)
 app.include_router(wellness.router)
+app.include_router(reminders.router)
 
 
 @app.get("/")

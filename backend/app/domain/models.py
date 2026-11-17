@@ -159,3 +159,24 @@ class SleepLog(Base):
     minutes = Column(Integer, nullable=False)
     quality = Column(Integer, nullable=True)  # 1..5
     points_awarded = Column(Integer, nullable=False, default=0)
+
+
+# ─── Reminders ──────────────────────────────────────────
+
+class ReminderSetting(Base):
+    """Opt-in email reminder preference. No row means reminders are off."""
+    __tablename__ = "reminder_settings"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    language = Column(String, nullable=False, default="en")
+
+
+class ReminderLog(Base):
+    """One row per user per day that was mailed, so re-running the job never double-sends."""
+    __tablename__ = "reminder_logs"
+    __table_args__ = (UniqueConstraint("user_id", "sent_on", name="uq_reminder_day"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    sent_on = Column(Date, nullable=False)

@@ -129,6 +129,10 @@ const en = {
     duration: '{h} h {m} min',
     hint: 'Reach the goals to earn {steps} points for steps and {sleep} for sleep, once per day.',
   },
+  reminders: {
+    label: 'Daily email reminder',
+    hint: "In the evening, get an email if you still have habits to check in today.",
+  },
   badges: {
     title: 'Badges',
     newBadge: 'New badge!',

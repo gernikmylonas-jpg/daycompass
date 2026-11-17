@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { apiErrorMessage } from '../i18n/errors'
+import api from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useHabitsStore, type Category, type Habit, type HeatmapDay } from '../stores/habits'
 import Heatmap from '../components/Heatmap.vue'
@@ -10,7 +11,7 @@ import BadgesPanel from '../components/BadgesPanel.vue'
 import BadgeToast from '../components/BadgeToast.vue'
 import { useBadgesStore } from '../stores/badges'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const auth = useAuthStore()
 const habitsStore = useHabitsStore()
 const badgesStore = useBadgesStore()
@@ -138,6 +139,34 @@ async function remove(habit: Habit) {
   }
 }
 
+const reminderEnabled = ref(false)
+const reminderReady = ref(false)
+
+async function loadReminder() {
+  try {
+    const { data } = await api.get<{ enabled: boolean; language: string }>('/api/reminders')
+    reminderEnabled.value = data.enabled
+  } catch {
+    // reminders are optional; leave the toggle off
+  } finally {
+    reminderReady.value = true
+  }
+}
+
+async function saveReminder() {
+  try {
+    await api.put('/api/reminders', { enabled: reminderEnabled.value, language: locale.value })
+  } catch (e) {
+    reminderEnabled.value = !reminderEnabled.value
+    showError(e)
+  }
+}
+
+// keep the email language in sync with the language chosen in the app
+watch(locale, () => {
+  if (reminderReady.value && reminderEnabled.value) saveReminder()
+})
+
 function logout() {
   auth.logout()
   router.push('/login')
@@ -145,7 +174,7 @@ function logout() {
 
 onMounted(async () => {
   try {
-    await Promise.all([habitsStore.fetchHabits(), habitsStore.fetchHeatmap(), auth.refreshUser()])
+    await Promise.all([habitsStore.fetchHabits(), habitsStore.fetchHeatmap(), auth.refreshUser(), loadReminder()])
   } catch (e) {
     showError(e)
   }
@@ -250,6 +279,13 @@ onMounted(async () => {
         </div>
 
         <Heatmap :days="habitsStore.heatmap" :title="t('home.activityAll')" />
+        <label v-if="reminderReady" class="bg-white rounded-xl shadow p-4 flex items-start gap-3 cursor-pointer">
+          <input v-model="reminderEnabled" @change="saveReminder" type="checkbox" class="mt-1 h-4 w-4" />
+          <span>
+            <span class="block text-sm font-medium text-slate-800">{{ t('reminders.label') }}</span>
+            <span class="block text-xs text-slate-500">{{ t('reminders.hint') }}</span>
+          </span>
+        </label>
         <BadgesPanel />
       </div>
       <BadgeToast />

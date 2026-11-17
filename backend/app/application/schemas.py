@@ -195,3 +195,8 @@ class WellnessSummary(BaseModel):
     avg_steps_7d: int
     avg_sleep_minutes_7d: int
     days: list[WellnessDay]  # last 14 days, oldest first
+
+
+class ReminderSettings(BaseModel):
+    enabled: bool
+    language: str = "en"

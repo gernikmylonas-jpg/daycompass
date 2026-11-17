@@ -20,7 +20,7 @@
 
 - [x] Δημιουργία FastAPI project (`app/` δομή: `domain/`, `application/`, `infrastructure/`, `api/`)
 - [x] Σύνδεση με PostgreSQL (SQLAlchemy) — ⏳ Alembic migrations λείπουν ακόμα (χρησιμοποιούμε `create_all`)
-- [ ] Docker Compose: Postgres + FastAPI container μαζί
+- [x] Docker Compose: Postgres + FastAPI container μαζί — `docker compose --profile full up -d --build` (api + worker + beat + Postgres + Redis)
 - [x] Μοντέλα: `User`, `Habit`, `CheckIn`
 - [x] JWT authentication (register/login, ίδια λογική με το προηγούμενο project)
 - [x] Automatic API docs (FastAPI το κάνει out-of-the-box — δεν χρειάζεται Swashbuckle setup)
@@ -91,9 +91,9 @@
 
 ## Φάση 10 — Background Jobs & Reminders
 
-- [ ] Celery + Redis setup
-- [ ] Καθημερινή υπενθύμιση αν δεν έγινε check-in
-- [ ] Νυχτερινό recalculation streaks/βαδίων (ασφαλές fallback)
+- [x] Celery + Redis setup
+- [x] Καθημερινή υπενθύμιση αν δεν έγινε check-in — email, opt-in από το Home, στη γλώσσα του χρήστη, 20:00 (ρυθμιζόμενο)
+- [x] Νυχτερινό recalculation streaks/βαδίων (ασφαλές fallback) — 03:30: backfill πόντων στόχων, επανέλεγχος badges (streaks), αναφορά drift πόντων (μόνο log, δεν διορθώνει)
 
 ## Φάση 11 — Device Integrations (Backend-only, χωρίς native app)
 

@@ -131,6 +131,10 @@ const el: Messages = {
     duration: '{h} ώ {m} λ',
     hint: 'Φτάσε τους στόχους για να κερδίζεις {steps} πόντους για τα βήματα και {sleep} για τον ύπνο, μία φορά την ημέρα.',
   },
+  reminders: {
+    label: 'Καθημερινή υπενθύμιση με email',
+    hint: 'Το βράδυ, λαμβάνεις email αν έχεις ακόμα habits για check-in σήμερα.',
+  },
   badges: {
     title: 'Badges',
     newBadge: 'Νέο badge!',
