@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
-import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import api from '../api'
+import { apiErrorMessage } from '../i18n/errors'
 
 interface GroupSummary {
   id: string
@@ -32,6 +33,7 @@ interface GroupDetail {
   leaderboard: LeaderboardEntry[]
 }
 
+const { t } = useI18n()
 const groups = ref<GroupSummary[]>([])
 const selected = ref<GroupDetail | null>(null)
 const period = ref<'all' | 'week'>('all')
@@ -46,9 +48,7 @@ const medals = ['🥇', '🥈', '🥉']
 const selectedId = computed(() => selected.value?.id ?? null)
 
 function showError(e: unknown) {
-  error.value = axios.isAxiosError(e)
-    ? (e.response?.data?.detail ?? 'Κάτι πήγε στραβά')
-    : 'Κάτι πήγε στραβά'
+  error.value = apiErrorMessage(e)
 }
 
 const WS_BASE = String(api.defaults.baseURL).replace(/^http/, 'ws')
@@ -206,7 +206,7 @@ async function joinGroup() {
 }
 
 async function leaveGroup() {
-  if (!selected.value || !confirm('Να αποχωρήσεις από το group;')) return
+  if (!selected.value || !confirm(t('groups.confirmLeave'))) return
   try {
     await api.delete(`/api/groups/${selected.value.id}/members/me`)
     disconnectSocket()
@@ -218,7 +218,7 @@ async function leaveGroup() {
 }
 
 async function deleteGroup() {
-  if (!selected.value || !confirm('Διαγραφή του group για όλα τα μέλη;')) return
+  if (!selected.value || !confirm(t('groups.confirmDelete'))) return
   try {
     await api.delete(`/api/groups/${selected.value.id}`)
     disconnectSocket()
@@ -245,13 +245,13 @@ onUnmounted(disconnectSocket)
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100 p-4 md:p-8">
+  <div class="min-h-[calc(100vh-3rem)] bg-slate-100 p-4 md:p-8">
     <div class="max-w-3xl mx-auto space-y-4">
       <header class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-slate-800">Groups</h1>
+        <h1 class="text-2xl font-bold text-slate-800">{{ t('groups.title') }}</h1>
         <RouterLink to="/"
           class="bg-slate-800 text-white rounded-lg px-4 py-2 text-sm hover:bg-slate-700">
-          ← Πυξίδα
+          {{ t('common.backToCompass') }}
         </RouterLink>
       </header>
 
@@ -259,24 +259,24 @@ onUnmounted(disconnectSocket)
 
       <section class="grid md:grid-cols-2 gap-4">
         <form @submit.prevent="createGroup" class="bg-white rounded-xl shadow p-4 space-y-2">
-          <h2 class="font-bold text-slate-800">Νέο group</h2>
-          <input v-model="newName" maxlength="60" placeholder="Όνομα"
+          <h2 class="font-bold text-slate-800">{{ t('groups.newGroup') }}</h2>
+          <input v-model="newName" maxlength="60" :placeholder="t('groups.namePlaceholder')"
             class="border rounded-lg px-3 py-2 text-sm w-full" />
-          <input v-model="newDescription" maxlength="200" placeholder="Περιγραφή (προαιρετικό)"
+          <input v-model="newDescription" maxlength="200" :placeholder="t('groups.descriptionPlaceholder')"
             class="border rounded-lg px-3 py-2 text-sm w-full" />
-          <button class="bg-slate-800 text-white rounded-lg px-4 py-2 text-sm hover:bg-slate-700">Δημιουργία</button>
+          <button class="bg-slate-800 text-white rounded-lg px-4 py-2 text-sm hover:bg-slate-700">{{ t('groups.create') }}</button>
         </form>
 
         <form @submit.prevent="joinGroup" class="bg-white rounded-xl shadow p-4 space-y-2">
-          <h2 class="font-bold text-slate-800">Συμμετοχή με κωδικό</h2>
-          <input v-model="joinCode" maxlength="8" placeholder="π.χ. AB12CD34"
+          <h2 class="font-bold text-slate-800">{{ t('groups.joinTitle') }}</h2>
+          <input v-model="joinCode" maxlength="8" :placeholder="t('groups.codePlaceholder')"
             class="border rounded-lg px-3 py-2 text-sm w-full uppercase tracking-widest" />
-          <button class="bg-slate-800 text-white rounded-lg px-4 py-2 text-sm hover:bg-slate-700">Συμμετοχή</button>
+          <button class="bg-slate-800 text-white rounded-lg px-4 py-2 text-sm hover:bg-slate-700">{{ t('groups.join') }}</button>
         </form>
       </section>
 
       <section class="bg-white rounded-xl shadow p-4">
-        <h2 class="font-bold text-slate-800 mb-2">Τα groups μου</h2>
+        <h2 class="font-bold text-slate-800 mb-2">{{ t('groups.mine') }}</h2>
         <ul v-if="groups.length" class="divide-y">
           <li v-for="g in groups" :key="g.id">
             <button @click="openGroup(g.id)"
@@ -284,13 +284,13 @@ onUnmounted(disconnectSocket)
                 g.id === selectedId ? 'bg-slate-100' : '']">
               <span>
                 <span class="font-medium text-slate-800">{{ g.name }}</span>
-                <span class="text-slate-400"> · {{ g.member_count }} μέλη</span>
+                <span class="text-slate-400"> · {{ t('groups.members', g.member_count) }}</span>
               </span>
               <span class="text-slate-500">#{{ g.my_rank }}</span>
             </button>
           </li>
         </ul>
-        <p v-else class="text-slate-400 text-sm">Δεν ανήκεις σε κανένα group ακόμα.</p>
+        <p v-else class="text-slate-400 text-sm">{{ t('groups.none') }}</p>
       </section>
 
       <section v-if="selected" class="bg-white rounded-xl shadow p-4 border-t-4 border-amber-500 space-y-3">
@@ -302,25 +302,25 @@ onUnmounted(disconnectSocket)
                 live === 'live' ? 'text-green-600' : 'text-slate-400']">
                 <span :class="['inline-block w-2 h-2 rounded-full',
                   live === 'live' ? 'bg-green-500' : live === 'connecting' ? 'bg-amber-400' : 'bg-slate-300']"></span>
-                {{ live === 'live' ? 'live' : live === 'connecting' ? 'σύνδεση…' : 'εκτός σύνδεσης' }}
+                {{ live === 'live' ? t('groups.live') : live === 'connecting' ? t('groups.connecting') : t('groups.offline') }}
               </span>
             </h2>
             <p v-if="selected.description" class="text-sm text-slate-500">{{ selected.description }}</p>
           </div>
-          <button @click="copyCode" title="Αντιγραφή κωδικού πρόσκλησης"
+          <button @click="copyCode" :title="t('groups.copyCode')"
             class="border border-slate-300 rounded-lg px-3 py-1 text-sm font-mono tracking-widest text-slate-700 hover:bg-slate-50">
-            {{ copied ? 'Αντιγράφηκε ✓' : selected.invite_code }}
+            {{ copied ? t('groups.copied') : selected.invite_code }}
           </button>
         </div>
 
         <div class="flex gap-2 text-sm">
           <button @click="setPeriod('all')"
             :class="['rounded-lg px-3 py-1', period === 'all' ? 'bg-slate-800 text-white' : 'border border-slate-300 text-slate-600']">
-            Συνολικά
+            {{ t('groups.periodAll') }}
           </button>
           <button @click="setPeriod('week')"
             :class="['rounded-lg px-3 py-1', period === 'week' ? 'bg-slate-800 text-white' : 'border border-slate-300 text-slate-600']">
-            Τελευταίες 7 μέρες
+            {{ t('groups.periodWeek') }}
           </button>
         </div>
 
@@ -330,20 +330,20 @@ onUnmounted(disconnectSocket)
             <span class="flex items-center gap-3">
               <span class="w-8 text-center text-lg">{{ medals[e.rank - 1] ?? e.rank }}</span>
               <span :class="e.is_me ? 'font-bold text-slate-800' : 'text-slate-700'">
-                {{ e.name }}<span v-if="e.is_me" class="text-slate-400 font-normal"> (εσύ)</span>
+                {{ e.name }}<span v-if="e.is_me" class="text-slate-400 font-normal"> ({{ t('groups.you') }})</span>
               </span>
             </span>
-            <span class="font-medium text-slate-800">{{ e.points }} πόντοι</span>
+            <span class="font-medium text-slate-800">{{ t('groups.points', { n: e.points }) }}</span>
           </li>
         </ol>
 
         <div class="flex justify-end gap-2 pt-2">
           <button @click="leaveGroup" class="text-sm border border-slate-300 text-slate-600 rounded-lg px-3 py-1 hover:bg-slate-50">
-            Αποχώρηση
+            {{ t('groups.leave') }}
           </button>
           <button v-if="selected.is_owner" @click="deleteGroup"
             class="text-sm border border-red-300 text-red-600 rounded-lg px-3 py-1 hover:bg-red-50">
-            Διαγραφή group
+            {{ t('groups.deleteGroup') }}
           </button>
         </div>
       </section>

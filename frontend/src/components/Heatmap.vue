@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { HeatmapDay } from '../stores/habits'
 
 const WEEKS = 17
-const props = withDefaults(defineProps<{ days: HeatmapDay[]; title?: string }>(), {
-  title: 'Δραστηριότητα',
-})
+const { t } = useI18n()
+const props = defineProps<{ days: HeatmapDay[]; title?: string }>()
+const heading = computed(() => props.title ?? t('heatmap.activity'))
 
 function iso(d: Date) {
   const y = d.getFullYear()
@@ -43,21 +44,21 @@ function color(count: number, future: boolean) {
 
 <template>
   <section class="bg-white rounded-xl shadow p-4">
-    <h2 class="text-lg font-bold text-slate-800 mb-3">{{ title }}</h2>
+    <h2 class="text-lg font-bold text-slate-800 mb-3">{{ heading }}</h2>
     <div class="overflow-x-auto">
       <div class="grid grid-flow-col grid-rows-7 gap-1 w-max">
         <div v-for="c in cells" :key="c.date"
-          :title="c.future ? '' : `${c.date}: ${c.count} check-in`"
+          :title="c.future ? '' : `${c.date}: ${t('heatmap.checkins', c.count)}`"
           :class="['w-3.5 h-3.5 rounded-sm', color(c.count, c.future)]" />
       </div>
     </div>
     <div class="flex items-center gap-1 mt-3 text-xs text-slate-500">
-      <span>Λιγότερο</span>
+      <span>{{ t('heatmap.less') }}</span>
       <span class="w-3.5 h-3.5 rounded-sm bg-slate-200" />
       <span class="w-3.5 h-3.5 rounded-sm bg-green-300" />
       <span class="w-3.5 h-3.5 rounded-sm bg-green-500" />
       <span class="w-3.5 h-3.5 rounded-sm bg-green-700" />
-      <span>Περισσότερο</span>
+      <span>{{ t('heatmap.more') }}</span>
     </div>
   </section>
 </template>

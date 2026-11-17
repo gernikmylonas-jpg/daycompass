@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
-import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import api from '../api'
 import BadgeToast from '../components/BadgeToast.vue'
 import { useBadgesStore, type BadgeInfo } from '../stores/badges'
+import { apiErrorMessage } from '../i18n/errors'
+import { intlLocale } from '../i18n'
 
 interface Session {
   id: string
@@ -23,6 +25,7 @@ interface Summary {
   recent: Session[]
 }
 
+const { t, locale } = useI18n()
 const badgesStore = useBadgesStore()
 const kind = ref<'work' | 'reading'>('work')
 const title = ref('')
@@ -44,16 +47,14 @@ const display = computed(() => {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 })
 
-const phaseLabel = computed(() => (phase.value === 'work' ? 'Εστίαση' : 'Διάλειμμα'))
+const phaseLabel = computed(() => (phase.value === 'work' ? t('pomodoro.focus') : t('pomodoro.break')))
 
 function totalSeconds() {
   return (phase.value === 'work' ? workMinutes.value : breakMinutes.value) * 60
 }
 
 function showError(e: unknown) {
-  error.value = axios.isAxiosError(e)
-    ? (e.response?.data?.detail ?? 'Κάτι πήγε στραβά')
-    : 'Κάτι πήγε στραβά'
+  error.value = apiErrorMessage(e)
 }
 
 async function loadSummary() {
@@ -95,7 +96,7 @@ async function finishPhase() {
         title: title.value.trim() || null,
         duration_minutes: workMinutes.value,
       })
-      earned.value = '🎉 +5 πόντοι!'
+      earned.value = t('pomodoro.earned', { n: 5 })
       await loadSummary()
       await badgesStore.announce(data.new_badges)
     } catch (e) {
@@ -134,11 +135,11 @@ function applySettings() {
 }
 
 function kindLabel(k: string) {
-  return k === 'work' ? 'Δουλειά' : 'Διάβασμα'
+  return k === 'work' ? t('pomodoro.kindWork') : t('pomodoro.kindReading')
 }
 
 function formatWhen(iso: string) {
-  return new Date(iso + 'Z').toLocaleString('el-GR', {
+  return new Date(iso + 'Z').toLocaleString(intlLocale(locale.value), {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
   })
 }
@@ -148,13 +149,13 @@ onUnmounted(stopTimer)
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100 p-4 md:p-8">
+  <div class="min-h-[calc(100vh-3rem)] bg-slate-100 p-4 md:p-8">
     <div class="max-w-2xl mx-auto space-y-4">
       <header class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-slate-800">Pomodoro</h1>
+        <h1 class="text-2xl font-bold text-slate-800">{{ t('pomodoro.title') }}</h1>
         <RouterLink to="/"
           class="bg-slate-800 text-white rounded-lg px-4 py-2 text-sm hover:bg-slate-700">
-          ← Πυξίδα
+          {{ t('common.backToCompass') }}
         </RouterLink>
       </header>
 
@@ -170,32 +171,32 @@ onUnmounted(stopTimer)
         <div class="flex justify-center gap-3">
           <button @click="toggle"
             class="bg-slate-800 text-white rounded-lg px-6 py-2 hover:bg-slate-700">
-            {{ running ? 'Παύση' : 'Έναρξη' }}
+            {{ running ? t('pomodoro.pause') : t('pomodoro.start') }}
           </button>
           <button @click="reset"
             class="border border-slate-300 text-slate-600 rounded-lg px-6 py-2 hover:bg-slate-50">
-            Επαναφορά
+            {{ t('pomodoro.reset') }}
           </button>
         </div>
 
         <input v-model="title" :disabled="running && phase === 'work'" type="text" maxlength="100"
-          placeholder="Τίτλος (π.χ. Κεφάλαιο 3 Vue)" class="border rounded-lg px-3 py-2 text-sm w-full max-w-sm" />
+          :placeholder="t('pomodoro.titlePlaceholder')" class="border rounded-lg px-3 py-2 text-sm w-full max-w-sm" />
 
         <div class="flex flex-wrap justify-center gap-4 text-sm text-slate-600 pt-2">
           <label class="flex items-center gap-2">
-            Τύπος
+            {{ t('pomodoro.kind') }}
             <select v-model="kind" :disabled="running" class="border rounded-lg px-2 py-1">
-              <option value="work">Δουλειά</option>
-              <option value="reading">Διάβασμα</option>
+              <option value="work">{{ t('pomodoro.kindWork') }}</option>
+              <option value="reading">{{ t('pomodoro.kindReading') }}</option>
             </select>
           </label>
           <label class="flex items-center gap-2">
-            Εστίαση (λεπτά)
+            {{ t('pomodoro.focusMinutes') }}
             <input v-model.number="workMinutes" @change="applySettings" :disabled="running"
               type="number" min="1" max="180" class="border rounded-lg px-2 py-1 w-16" />
           </label>
           <label class="flex items-center gap-2">
-            Διάλειμμα (λεπτά)
+            {{ t('pomodoro.breakMinutes') }}
             <input v-model.number="breakMinutes" @change="applySettings" :disabled="running"
               type="number" min="1" max="60" class="border rounded-lg px-2 py-1 w-16" />
           </label>
@@ -204,31 +205,31 @@ onUnmounted(stopTimer)
 
       <section v-if="summary" class="grid grid-cols-2 gap-4">
         <div class="bg-white rounded-xl shadow p-4">
-          <p class="text-sm text-slate-500">Σήμερα</p>
-          <p class="text-2xl font-bold text-slate-800">{{ summary.today_minutes }} λεπτά</p>
-          <p class="text-xs text-slate-400">{{ summary.today_sessions }} sessions</p>
+          <p class="text-sm text-slate-500">{{ t('pomodoro.today') }}</p>
+          <p class="text-2xl font-bold text-slate-800">{{ t('pomodoro.minutes', { n: summary.today_minutes }) }}</p>
+          <p class="text-xs text-slate-400">{{ t('pomodoro.sessions', summary.today_sessions) }}</p>
         </div>
         <div class="bg-white rounded-xl shadow p-4">
-          <p class="text-sm text-slate-500">Συνολικά</p>
-          <p class="text-2xl font-bold text-slate-800">{{ summary.total_minutes }} λεπτά</p>
-          <p class="text-xs text-slate-400">{{ summary.total_sessions }} sessions</p>
+          <p class="text-sm text-slate-500">{{ t('pomodoro.total') }}</p>
+          <p class="text-2xl font-bold text-slate-800">{{ t('pomodoro.minutes', { n: summary.total_minutes }) }}</p>
+          <p class="text-xs text-slate-400">{{ t('pomodoro.sessions', summary.total_sessions) }}</p>
         </div>
       </section>
 
       <section v-if="summary" class="bg-white rounded-xl shadow p-4">
-        <h2 class="font-bold text-slate-800 mb-2">Ιστορικό</h2>
+        <h2 class="font-bold text-slate-800 mb-2">{{ t('pomodoro.history') }}</h2>
         <ul v-if="summary.recent.length" class="divide-y">
           <li v-for="s in summary.recent" :key="s.id"
             class="flex justify-between py-2 text-sm text-slate-700">
             <span>
               <span v-if="s.title" class="font-medium">{{ s.title }}</span>
               <span v-else>{{ kindLabel(s.kind) }}</span>
-              · {{ s.duration_minutes }} λεπτά
+              · {{ t('pomodoro.minutes', { n: s.duration_minutes }) }}
             </span>
             <span class="text-slate-400">{{ formatWhen(s.completed_at) }}</span>
           </li>
         </ul>
-        <p v-else class="text-slate-400 text-sm">Κανένα session ακόμα.</p>
+        <p v-else class="text-slate-400 text-sm">{{ t('pomodoro.noSessions') }}</p>
       </section>
     </div>
     <BadgeToast />

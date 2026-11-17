@@ -1,0 +1,52 @@
+import axios from 'axios'
+import { i18n } from './index'
+
+// The backend answers with English `detail` strings. Map the known ones to translated
+// messages; capture group 1 (if any) becomes the {n} parameter.
+const RULES: [RegExp, string][] = [
+  [/^Invalid invite code$/, 'invalidInviteCode'],
+  [/^Already a member of this group$/, 'alreadyMember'],
+  [/^Habit not found$/, 'habitNotFound'],
+  [/^Group not found$/, 'groupNotFound'],
+  [/^User not found$/, 'userNotFound'],
+  [/^Email already registered$/, 'emailRegistered'],
+  [/^Already checked in today$/, 'alreadyCheckedIn'],
+  [/^Only the owner can delete the group$/, 'ownerOnly'],
+  [/^Invalid category$/, 'invalidCategory'],
+  [/^Invalid kind$/, 'invalidKind'],
+  [/^Invalid email or password$/, 'invalidCredentials'],
+  [/^Invalid (or expired )?token$/, 'invalidSession'],
+  [/^Name (is required|cannot be empty)$/, 'nameRequired'],
+  [/^Name is too long \(max (\d+) characters\)$/, 'nameTooLong'],
+  [/^Description is too long \(max (\d+) characters\)$/, 'descriptionTooLong'],
+  [/^Title is too long \(max (\d+) characters\)$/, 'titleTooLong'],
+  [/^Duration must be between 1 and 180 minutes$/, 'durationRange'],
+  [/^Date cannot be in the future$/, 'futureDate'],
+  [/^Date cannot be older than (\d+) days$/, 'dateTooOld'],
+  [/^Steps must be between 0 and (\d+)$/, 'stepsRange'],
+  [/^Sleep must be between 0 and 24 hours$/, 'sleepRange'],
+  [/^Quality must be between 1 and 5$/, 'qualityRange'],
+  [/^End date must not be before start date$/, 'endBeforeStart'],
+  [/^Range is limited to (\d+) days$/, 'rangeLimited'],
+  [/^Period must be /, 'periodInvalid'],
+]
+
+export function apiErrorMessage(e: unknown): string {
+  const { t } = i18n.global
+  if (!axios.isAxiosError(e) || !e.response) return t('common.genericError')
+
+  const detail = e.response.data?.detail
+  if (typeof detail === 'string') {
+    for (const [pattern, key] of RULES) {
+      const match = pattern.exec(detail)
+      if (match) {
+        // the {n} parameter is the last captured number, when the rule has one
+        const n = [...match].slice(1).reverse().find((g) => g && /^\d+$/.test(g))
+        return t(`errors.${key}`, { n: n ?? '' })
+      }
+    }
+  }
+  // FastAPI validation errors (e.g. a malformed email) arrive as a list
+  if (e.response.status === 422) return t('errors.invalidInput')
+  return t('common.genericError')
+}

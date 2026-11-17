@@ -134,3 +134,28 @@ class GroupMember(Base):
     joined_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     group = relationship("Group", back_populates="members")
+
+
+# ─── Steps & Sleep (χειροκίνητη καταγραφή) ───────────────
+
+class StepLog(Base):
+    __tablename__ = "step_logs"
+    __table_args__ = (UniqueConstraint("user_id", "log_date", name="uq_step_log_day"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    log_date = Column(Date, nullable=False, default=date.today)
+    steps = Column(Integer, nullable=False)
+    points_awarded = Column(Integer, nullable=False, default=0)
+
+
+class SleepLog(Base):
+    __tablename__ = "sleep_logs"
+    __table_args__ = (UniqueConstraint("user_id", "log_date", name="uq_sleep_log_day"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    log_date = Column(Date, nullable=False, default=date.today)  # day the user woke up
+    minutes = Column(Integer, nullable=False)
+    quality = Column(Integer, nullable=True)  # 1..5
+    points_awarded = Column(Integer, nullable=False, default=0)

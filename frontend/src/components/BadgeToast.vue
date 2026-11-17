@@ -1,7 +1,17 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useBadgesStore } from '../stores/badges'
 
+const { t, te } = useI18n()
 const store = useBadgesStore()
+
+// Badge texts come from the backend (Greek); prefer the translation for known codes.
+function badgeName(code: string, fallback: string) {
+  return te(`badges.${code}.name`) ? t(`badges.${code}.name`) : fallback
+}
+function badgeDescription(code: string, fallback: string) {
+  return te(`badges.${code}.description`) ? t(`badges.${code}.description`) : fallback
+}
 </script>
 
 <template>
@@ -11,9 +21,9 @@ const store = useBadgesStore()
       @click="store.dismiss()">
       <span class="text-2xl">{{ b.icon }}</span>
       <div>
-        <p class="text-xs text-slate-300">Νέο badge!</p>
-        <p class="font-bold text-sm">{{ b.name }}</p>
-        <p class="text-xs text-slate-300">{{ b.description }}</p>
+        <p class="text-xs text-slate-300">{{ t('badges.newBadge') }}</p>
+        <p class="font-bold text-sm">{{ badgeName(b.code, b.name) }}</p>
+        <p class="text-xs text-slate-300">{{ badgeDescription(b.code, b.description) }}</p>
       </div>
     </div>
   </div>

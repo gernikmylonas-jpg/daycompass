@@ -154,3 +154,44 @@ class GroupDetail(BaseModel):
     is_owner: bool
     period: str
     leaderboard: list[LeaderboardEntry]
+
+
+class StepLogUpsert(BaseModel):
+    steps: int
+    log_date: Optional[date] = None
+
+
+class SleepLogUpsert(BaseModel):
+    minutes: int
+    quality: Optional[int] = None
+    log_date: Optional[date] = None
+
+
+class StepLogResponse(BaseModel):
+    log_date: date
+    steps: int
+    goal_reached: bool
+    points_awarded: int
+
+
+class SleepLogResponse(BaseModel):
+    log_date: date
+    minutes: int
+    quality: Optional[int] = None
+    goal_reached: bool
+    points_awarded: int
+
+
+class WellnessDay(BaseModel):
+    date: date
+    steps: Optional[int] = None
+    sleep_minutes: Optional[int] = None
+    sleep_quality: Optional[int] = None
+
+
+class WellnessSummary(BaseModel):
+    step_goal: int
+    sleep_goal_minutes: int
+    avg_steps_7d: int
+    avg_sleep_minutes_7d: int
+    days: list[WellnessDay]  # last 14 days, oldest first

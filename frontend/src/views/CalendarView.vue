@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
-import axios from 'axios'
+import { useI18n } from 'vue-i18n'
 import api from '../api'
 import type { Category } from '../stores/habits'
+import { apiErrorMessage } from '../i18n/errors'
+import { intlLocale } from '../i18n'
+
+const { t, locale } = useI18n()
 
 interface Entry {
   date: string
@@ -12,12 +16,17 @@ interface Entry {
   category: Category
 }
 
-const MONTHS = [
-  'Ιανουάριος', 'Φεβρουάριος', 'Μάρτιος', 'Απρίλιος', 'Μάιος', 'Ιούνιος',
-  'Ιούλιος', 'Αύγουστος', 'Σεπτέμβριος', 'Οκτώβριος', 'Νοέμβριος', 'Δεκέμβριος',
-]
-const MONTHS_SHORT = ['Ιαν', 'Φεβ', 'Μαρ', 'Απρ', 'Μαΐ', 'Ιουν', 'Ιουλ', 'Αυγ', 'Σεπ', 'Οκτ', 'Νοε', 'Δεκ']
-const WEEKDAYS = ['Δευ', 'Τρί', 'Τετ', 'Πέμ', 'Παρ', 'Σάβ', 'Κυρ']
+const loc = computed(() => intlLocale(locale.value))
+
+function cap(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+// 2024-01-01 was a Monday, so these are Monday..Sunday in the active language.
+const WEEKDAYS = computed(() => {
+  const f = new Intl.DateTimeFormat(loc.value, { weekday: 'short' })
+  return Array.from({ length: 7 }, (_, i) => cap(f.format(new Date(2024, 0, 1 + i))))
+})
 
 const dotColor: Record<Category, string> = {
   body: 'bg-teal-500',
@@ -84,18 +93,27 @@ const cells = computed(() => {
 })
 
 const weekDays = computed(() =>
-  WEEKDAYS.map((label, i) => {
+  WEEKDAYS.value.map((label, i) => {
     const date = addDays(weekStart.value, i)
     return { label, date, day: parse(date).getDate() }
   }),
 )
 
 const title = computed(() => {
-  if (view.value === 'month') return `${MONTHS[month.value - 1]} ${year.value}`
+  if (view.value === 'month') {
+    const f = new Intl.DateTimeFormat(loc.value, { month: 'long', year: 'numeric' })
+    return cap(f.format(new Date(year.value, month.value - 1, 1)))
+  }
+  const short = new Intl.DateTimeFormat(loc.value, { day: 'numeric', month: 'short' })
   const a = parse(weekStart.value)
   const b = parse(addDays(weekStart.value, 6))
-  return `${a.getDate()} ${MONTHS_SHORT[a.getMonth()]} – ${b.getDate()} ${MONTHS_SHORT[b.getMonth()]} ${b.getFullYear()}`
+  return `${short.format(a)} – ${short.format(b)} ${b.getFullYear()}`
 })
+
+function fullDate(iso: string) {
+  const f = new Intl.DateTimeFormat(loc.value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return cap(f.format(parse(iso)))
+}
 
 const selectedEntries = computed(() =>
   selected.value ? (byDate.value.get(selected.value) ?? []) : [],
@@ -116,9 +134,7 @@ async function load() {
     })
     entries.value = data
   } catch (e) {
-    error.value = axios.isAxiosError(e)
-      ? (e.response?.data?.detail ?? 'Κάτι πήγε στραβά')
-      : 'Κάτι πήγε στραβά'
+    error.value = apiErrorMessage(e)
   }
 }
 
@@ -161,13 +177,13 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100 p-4 md:p-8">
+  <div class="min-h-[calc(100vh-3rem)] bg-slate-100 p-4 md:p-8">
     <div class="max-w-4xl mx-auto">
       <header class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold text-slate-800">Ημερολόγιο</h1>
+        <h1 class="text-2xl font-bold text-slate-800">{{ t('calendar.title') }}</h1>
         <RouterLink to="/"
           class="bg-slate-800 text-white rounded-lg px-4 py-2 text-sm hover:bg-slate-700">
-          ← Πυξίδα
+          {{ t('common.backToCompass') }}
         </RouterLink>
       </header>
 
@@ -177,11 +193,11 @@ onMounted(load)
         <div class="flex justify-center gap-2 mb-4">
           <button @click="setView('month')"
             :class="['px-4 py-1 rounded-lg text-sm', view === 'month' ? 'bg-slate-800 text-white' : 'border border-slate-300 text-slate-600 hover:bg-slate-50']">
-            Μήνας
+            {{ t('calendar.month') }}
           </button>
           <button @click="setView('week')"
             :class="['px-4 py-1 rounded-lg text-sm', view === 'week' ? 'bg-slate-800 text-white' : 'border border-slate-300 text-slate-600 hover:bg-slate-50']">
-            Εβδομάδα
+            {{ t('calendar.week') }}
           </button>
         </div>
 
@@ -232,14 +248,14 @@ onMounted(load)
       </section>
 
       <section v-if="view === 'month' && selected" class="bg-white rounded-xl shadow p-4 mt-4">
-        <h3 class="font-bold text-slate-800 mb-2">{{ selected }}</h3>
+        <h3 class="font-bold text-slate-800 mb-2">{{ fullDate(selected) }}</h3>
         <ul v-if="selectedEntries.length" class="space-y-1">
           <li v-for="e in selectedEntries" :key="e.habit_id" class="flex items-center gap-2 text-sm text-slate-700">
             <span :class="['w-2 h-2 rounded-full', dotColor[e.category]]" />
             {{ e.habit_name }}
           </li>
         </ul>
-        <p v-else class="text-slate-400 text-sm">Κανένα check-in αυτή τη μέρα.</p>
+        <p v-else class="text-slate-400 text-sm">{{ t('calendar.noCheckins') }}</p>
       </section>
     </div>
   </div>

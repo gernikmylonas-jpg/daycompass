@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
-import axios from 'axios'
+import { useI18n } from 'vue-i18n'
+import { apiErrorMessage } from '../i18n/errors'
 import { useAuthStore } from '../stores/auth'
 import { useHabitsStore, type Category, type Habit, type HeatmapDay } from '../stores/habits'
 import Heatmap from '../components/Heatmap.vue'
@@ -9,6 +10,7 @@ import BadgesPanel from '../components/BadgesPanel.vue'
 import BadgeToast from '../components/BadgeToast.vue'
 import { useBadgesStore } from '../stores/badges'
 
+const { t } = useI18n()
 const auth = useAuthStore()
 const habitsStore = useHabitsStore()
 const badgesStore = useBadgesStore()
@@ -33,27 +35,25 @@ const selectedHabit = computed(
   () => habitsStore.habits.find((h) => h.id === selectedId.value) ?? null,
 )
 
-const directions: {
+const directions = computed<{
   key: Category
   title: string
   subtitle: string
   position: string
   accent: string
-}[] = [
-  { key: 'body', title: 'Βορράς', subtitle: 'Σώμα', position: 'md:col-start-2 md:row-start-1', accent: 'border-teal-500' },
-  { key: 'work', title: 'Δύση', subtitle: 'Δουλειά & μελέτη', position: 'md:col-start-1 md:row-start-2', accent: 'border-orange-500' },
-  { key: 'schedule', title: 'Ανατολή', subtitle: 'Πρόγραμμα', position: 'md:col-start-3 md:row-start-2', accent: 'border-pink-500' },
-  { key: 'mind', title: 'Νότος', subtitle: 'Mental health', position: 'md:col-start-2 md:row-start-3', accent: 'border-purple-500' },
-]
+}[]>(() => [
+  { key: 'body', title: t('home.north.title'), subtitle: t('home.north.subtitle'), position: 'md:col-start-2 md:row-start-1', accent: 'border-teal-500' },
+  { key: 'work', title: t('home.west.title'), subtitle: t('home.west.subtitle'), position: 'md:col-start-1 md:row-start-2', accent: 'border-orange-500' },
+  { key: 'schedule', title: t('home.east.title'), subtitle: t('home.east.subtitle'), position: 'md:col-start-3 md:row-start-2', accent: 'border-pink-500' },
+  { key: 'mind', title: t('home.south.title'), subtitle: t('home.south.subtitle'), position: 'md:col-start-2 md:row-start-3', accent: 'border-purple-500' },
+])
 
 function habitsIn(category: Category) {
   return habitsStore.habits.filter((h) => h.category === category)
 }
 
 function showError(e: unknown) {
-  error.value = axios.isAxiosError(e)
-    ? (e.response?.data?.detail ?? 'Κάτι πήγε στραβά')
-    : 'Κάτι πήγε στραβά'
+  error.value = apiErrorMessage(e)
 }
 
 async function loadSelected() {
@@ -153,18 +153,19 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100 p-4 md:p-8">
+  <div class="min-h-[calc(100vh-3rem)] bg-slate-100 p-4 md:p-8">
     <div class="max-w-5xl mx-auto">
       <header class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-slate-800">DayCompass</h1>
         <div class="flex items-center gap-4">
-          <RouterLink to="/pomodoro" class="text-slate-600 text-sm hover:text-slate-900 underline">Pomodoro</RouterLink>
-          <RouterLink to="/groups" class="text-slate-600 text-sm hover:text-slate-900 underline">Groups</RouterLink>
-          <RouterLink to="/calendar" class="text-slate-600 text-sm hover:text-slate-900 underline">Ημερολόγιο</RouterLink>
+          <RouterLink to="/pomodoro" class="text-slate-600 text-sm hover:text-slate-900 underline">{{ t('nav.pomodoro') }}</RouterLink>
+          <RouterLink to="/groups" class="text-slate-600 text-sm hover:text-slate-900 underline">{{ t('nav.groups') }}</RouterLink>
+          <RouterLink to="/wellness" class="text-slate-600 text-sm hover:text-slate-900 underline">{{ t('nav.wellness') }}</RouterLink>
+          <RouterLink to="/calendar" class="text-slate-600 text-sm hover:text-slate-900 underline">{{ t('nav.calendar') }}</RouterLink>
           <span class="text-slate-600 text-sm">{{ auth.user?.name }}</span>
           <button @click="logout"
             class="bg-slate-800 text-white rounded-lg px-4 py-2 text-sm hover:bg-slate-700">
-            Αποσύνδεση
+            {{ t('nav.logout') }}
           </button>
         </div>
       </header>
@@ -192,11 +193,11 @@ onMounted(async () => {
                 <div class="flex gap-2">
                   <button type="submit"
                     class="bg-slate-800 text-white rounded-lg px-3 py-1 text-sm hover:bg-slate-700">
-                    Αποθήκευση
+                    {{ t('common.save') }}
                   </button>
                   <button type="button" @click="cancelEdit"
                     class="border border-slate-300 text-slate-600 rounded-lg px-3 py-1 text-sm hover:bg-slate-50">
-                    Άκυρο
+                    {{ t('common.cancel') }}
                   </button>
                 </div>
               </form>
@@ -211,21 +212,21 @@ onMounted(async () => {
                   {{ h.name }}
                 </span>
                 <span v-if="h.current_streak > 0" class="text-xs text-orange-500 whitespace-nowrap"
-                  :title="`Καλύτερο streak: ${h.best_streak}`">🔥 {{ h.current_streak }}</span>
+                  :title="t('home.bestStreak', { n: h.best_streak })">🔥 {{ h.current_streak }}</span>
                 <button @click="selectHabit(h)"
                   :class="['text-sm', selectedId === h.id ? 'text-green-600' : 'text-slate-300 hover:text-slate-600']"
-                  title="Heatmap">📊</button>
-                <button @click="startEdit(h)" class="text-slate-300 hover:text-slate-600 text-sm" title="Επεξεργασία">✎</button>
-                <button @click="remove(h)" class="text-slate-300 hover:text-red-500 text-sm" title="Διαγραφή">✕</button>
+                  :title="t('home.heatmap')">📊</button>
+                <button @click="startEdit(h)" class="text-slate-300 hover:text-slate-600 text-sm" :title="t('home.edit')">✎</button>
+                <button @click="remove(h)" class="text-slate-300 hover:text-red-500 text-sm" :title="t('home.remove')">✕</button>
               </div>
             </li>
             <li v-if="habitsIn(d.key).length === 0" class="text-slate-400 text-sm">
-              Κανένα habit ακόμα
+              {{ t('home.noHabits') }}
             </li>
           </ul>
 
           <form @submit.prevent="add(d.key)" class="flex gap-2">
-            <input v-model="newNames[d.key]" type="text" placeholder="Νέο habit..."
+            <input v-model="newNames[d.key]" type="text" :placeholder="t('home.newHabit')"
               class="flex-1 border rounded-lg px-3 py-1.5 text-sm" />
             <button type="submit"
               class="bg-slate-800 text-white rounded-lg px-3 text-sm hover:bg-slate-700">+</button>
@@ -234,7 +235,7 @@ onMounted(async () => {
 
         <section
           class="bg-slate-800 text-white rounded-xl shadow p-4 flex flex-col items-center justify-center md:col-start-2 md:row-start-2">
-          <p class="text-sm text-slate-300">Σύνολο πόντων</p>
+          <p class="text-sm text-slate-300">{{ t('home.totalPoints') }}</p>
           <p class="text-5xl font-bold">{{ auth.user?.total_points }}</p>
         </section>
       </div>
@@ -242,13 +243,13 @@ onMounted(async () => {
       <div class="mt-4 space-y-4">
         <div v-if="selectedHabit" class="space-y-2">
           <div class="flex items-center justify-between text-sm text-slate-600 px-1">
-            <span>🔥 Τρέχον: {{ selectedHabit.current_streak }} · 🏆 Καλύτερο: {{ selectedHabit.best_streak }}</span>
-            <button @click="closeSelected" class="hover:text-slate-900">Κλείσιμο ✕</button>
+            <span>{{ t('home.streakSummary', { current: selectedHabit.current_streak, best: selectedHabit.best_streak }) }}</span>
+            <button @click="closeSelected" class="hover:text-slate-900">{{ t('common.close') }} ✕</button>
           </div>
-          <Heatmap :days="selectedDays" :title="`Heatmap: ${selectedHabit.name}`" />
+          <Heatmap :days="selectedDays" :title="t('home.heatmapFor', { name: selectedHabit.name })" />
         </div>
 
-        <Heatmap :days="habitsStore.heatmap" title="Δραστηριότητα (όλα τα habits)" />
+        <Heatmap :days="habitsStore.heatmap" :title="t('home.activityAll')" />
         <BadgesPanel />
       </div>
       <BadgeToast />

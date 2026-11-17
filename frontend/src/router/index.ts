@@ -4,6 +4,7 @@ import HomeView from '../views/HomeView.vue'
 import CalendarView from '../views/CalendarView.vue'
 import PomodoroView from '../views/PomodoroView.vue'
 import GroupsView from '../views/GroupsView.vue'
+import WellnessView from '../views/WellnessView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 
@@ -14,6 +15,7 @@ const router = createRouter({
     { path: '/calendar', component: CalendarView, meta: { requiresAuth: true } },
     { path: '/pomodoro', component: PomodoroView, meta: { requiresAuth: true } },
     { path: '/groups', component: GroupsView, meta: { requiresAuth: true } },
+    { path: '/wellness', component: WellnessView, meta: { requiresAuth: true } },
     { path: '/login', component: LoginView },
     { path: '/register', component: RegisterView },
   ],
