@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
 from app.domain.models import JournalEntry, JournalAudio
-from app.application.schemas import JournalEntryResponse, JournalPage, JournalUpdate
+from app.application.schemas import JournalEntryResponse, JournalPage, JournalUpdate, BadgeInfo
+from app.application.services.badges import award_badges
 
 router = APIRouter(prefix="/api/journal", tags=["journal"])
 
@@ -104,9 +105,12 @@ async def create_entry(
             seconds=max(0, min(int(audio_seconds), MAX_AUDIO_SECONDS)),
         )
         db.add(attached)
+    new_badges = award_badges(db, user_id)
     db.commit()
     db.refresh(entry)
-    return _response(entry, attached)
+    result = _response(entry, attached)
+    result.new_badges = [BadgeInfo.model_validate(b) for b in new_badges]
+    return result
 
 
 @router.put("/{entry_id}", response_model=JournalEntryResponse)

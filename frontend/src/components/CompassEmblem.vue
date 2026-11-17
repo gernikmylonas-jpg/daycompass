@@ -120,12 +120,3 @@ const hexagon = computed(() => fmt(Array.from({ length: 6 }, (_, i) => pt(40, i 
   </svg>
 </template>
 
-<style scoped>
-.emblem {
-  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-:global(a:hover) > .emblem,
-:global(a:focus-visible) > .emblem {
-  transform: rotate(22.5deg) scale(1.04);
-}
-</style>

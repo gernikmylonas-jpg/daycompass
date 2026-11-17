@@ -35,8 +35,9 @@ async function submit() {
         class="w-full border rounded-lg px-3 py-2" />
       <input v-model="email" type="email" :placeholder="t('auth.email')" :aria-label="t('auth.email')" required
         class="w-full border rounded-lg px-3 py-2" />
-      <input v-model="password" type="password" :placeholder="t('auth.password')" :aria-label="t('auth.password')" required
+      <input v-model="password" type="password" minlength="8" autocomplete="new-password" :placeholder="t('auth.password')" :aria-label="t('auth.password')" required
         class="w-full border rounded-lg px-3 py-2" />
+      <p class="text-xs text-slate-500 -mt-2">{{ t('auth.passwordHint') }}</p>
 
       <p v-if="error" role="alert" class="text-danger text-sm">{{ error }}</p>
 

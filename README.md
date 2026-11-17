@@ -54,7 +54,7 @@ The **Settings** menu (top right) switches between 7 compass styles and toggles 
 
 ## The compass home screen
 
-The home page is a big compass with eight directions. N, E, S and W hold habits (steps & sleep sit inside N), SW is the Pomodoro timer, SE the calendar (2000–2100, with notes, birthdays and reminders), NW the groups, and NE is still reserved. Pressing a letter opens that direction's panel; the ring around each letter shows today's progress. The symbol in the middle (different for every compass style) opens points and badges. Clicking the "DayCompass" title opens a short guide.
+The home page is a big compass with eight directions. N, E, S and W hold habits (steps & sleep sit inside N), SW is the Pomodoro timer, SE the calendar (2000–2100, with notes, birthdays and reminders), NW the groups, and NE is still reserved. Pressing a letter opens that direction's panel; the ring around each letter shows today's progress. The symbol in the middle (different for every compass style, and it turns to face the pointer) opens points and badges. Clicking the "DayCompass" title opens a short guide.
 
 To give a reserved direction a feature, change its entry in `directions` in `frontend/src/views/HomeView.vue` (`kind: 'soon'` becomes `'habits'`, `'pomodoro'`, `'groups'`, `'calendar'` or a new kind) and add its panel next to the others.
 
@@ -62,16 +62,20 @@ To give a reserved direction a feature, change its entry in `directions` in `fro
 
 | Direction | Contents |
 |---|---|
-| N | Body habits · **Steps & sleep** (log and history) |
+| N | Body habits · **Steps** (log any date since 2000; complete history, no retention limit) |
 | E | Schedule habits · **Calendars: Moon & eclipses** (moon phases for every day 2000–2100, solar and lunar eclipses, equinoxes/solstices, meteor showers) |
-| S | Mind habits · **Journal** (write and/or record your voice; private to your account) |
+| S | Mind habits · **Journal** (write and/or record your voice; private to your account) · **Daily mood** (1–10 as emoji, colours or words) · **Meditation** (timer with a breathing guide, +5 points) |
 | W | Work & study habits |
 | NW | Groups with a live leaderboard |
-| SE | Calendar 2000–2100 with notes, birthdays and reminders |
+| SE | Calendar 2000–2100 with notes, birthdays and reminders (right-click a day to add one) |
 | SW | Pomodoro timer |
-| NE | reserved |
+| NE | **Sleep** (hours, quality; complete history, no retention limit) |
 
 Dates are always shown day / month / year. The astronomy is computed in the browser (`frontend/src/astronomy.ts`, Meeus' *Astronomical Algorithms*); results agree with published data to about a minute. Journal recordings are stored in the database (`journal_audio`), limited to 8 MB / 10 minutes each, and are served only to their owner. `ensure_columns()` in `backend/app/infrastructure/database.py` adds columns introduced after a table was created, until Alembic migrations are set up.
+
+## Profile, streak and badges
+
+Click your name (top right on the compass) for your profile: name, email, password change and a summary. Passwords are stored hashed, so they can only be changed, never shown (minimum 8 characters). The flame next to your name is your **daily streak**: days in a row with at least one habit check-in. The symbol in the middle opens points and the **55 badges**, which have their own artwork (`frontend/src/badgeArt.ts`) and are awarded by the rules in `backend/app/application/services/badges.py`. To add a badge: add it to the catalog and `RULES` there, give it art in `badgeArt.ts` and add its name/description to the four locale files.
 
 ## Your settings follow your account
 

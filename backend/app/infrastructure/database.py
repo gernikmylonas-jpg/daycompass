@@ -21,6 +21,7 @@ def ensure_columns() -> None:
         return
     statements = [
         "ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW()",
+        "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS mood_style VARCHAR NOT NULL DEFAULT 'emoji'",
     ]
     with engine.begin() as conn:
         for statement in statements:

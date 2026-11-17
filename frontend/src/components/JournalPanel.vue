@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import api from '../api'
 import { apiErrorMessage } from '../i18n/errors'
 import { formatDate, toIso } from '../i18n/dates'
+import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 import DateField from './DateField.vue'
 
 // A private journal: write, and/or record your voice. Recordings are made with the browser's
@@ -30,6 +31,7 @@ const MAX_RECORD_SECONDS = 10 * 60
 const PAGE = 10
 
 const { t } = useI18n()
+const badgesStore = useBadgesStore()
 const today = toIso(new Date())
 
 const entries = ref<Entry[]>([])
@@ -152,7 +154,8 @@ async function save() {
       form.append('audio_seconds', String(recSeconds))
       form.append('audio', new File([recBlob], `journal.${ext}`, { type: recBlob.type }))
     }
-    await api.post('/api/journal', form)
+    const { data } = await api.post<{ new_badges?: BadgeInfo[] }>('/api/journal', form)
+    await badgesStore.announce(data.new_badges)
     content.value = ''
     mood.value = null
     discardRecording()

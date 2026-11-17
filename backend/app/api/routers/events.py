@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
 from app.domain.models import CalendarEvent
-from app.application.schemas import EventCreate, EventResponse
+from app.application.schemas import EventCreate, EventResponse, BadgeInfo
+from app.application.services.badges import award_badges
 
 router = APIRouter(prefix="/api/calendar/events", tags=["calendar"])
 
@@ -98,9 +99,12 @@ def create_event(payload: EventCreate, user_id: str = Depends(get_current_user_i
         notes=notes, repeat_yearly=payload.repeat_yearly,
     )
     db.add(event)
+    new_badges = award_badges(db, user_id)
     db.commit()
     db.refresh(event)
-    return _to_response(event, event.event_date)
+    result = _to_response(event, event.event_date)
+    result.new_badges = [BadgeInfo.model_validate(b) for b in new_badges]
+    return result
 
 
 def _own(db: Session, event_id: UUID, user_id: str) -> CalendarEvent:

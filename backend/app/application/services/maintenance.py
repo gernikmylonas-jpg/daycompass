@@ -1,10 +1,10 @@
 import logging
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from app.domain.models import User, Habit, CheckIn, PomodoroSession, StepLog, SleepLog
+from app.domain.models import User, Habit, CheckIn, PomodoroSession, StepLog, SleepLog, MeditationSession
 from app.application.services.badges import award_badges
 from app.application.services.points import (
-    POINTS_PER_CHECK_IN, POINTS_PER_POMODORO,
+    POINTS_PER_CHECK_IN, POINTS_PER_POMODORO, POINTS_PER_MEDITATION,
     STEP_GOAL, SLEEP_GOAL_MINUTES, POINTS_PER_STEP_GOAL, POINTS_PER_SLEEP_GOAL,
 )
 
@@ -53,6 +53,11 @@ def points_drift(db: Session) -> list[dict]:
         .group_by(PomodoroSession.user_id)
         .all()
     )
+    meditations = dict(
+        db.query(MeditationSession.user_id, func.count(MeditationSession.id))
+        .group_by(MeditationSession.user_id)
+        .all()
+    )
     steps = dict(db.query(StepLog.user_id, func.sum(StepLog.points_awarded)).group_by(StepLog.user_id).all())
     sleep = dict(db.query(SleepLog.user_id, func.sum(SleepLog.points_awarded)).group_by(SleepLog.user_id).all())
 
@@ -61,6 +66,7 @@ def points_drift(db: Session) -> list[dict]:
         expected = (
             check_ins.get(user.id, 0) * POINTS_PER_CHECK_IN
             + pomodoros.get(user.id, 0) * POINTS_PER_POMODORO
+            + meditations.get(user.id, 0) * POINTS_PER_MEDITATION
             + int(steps.get(user.id) or 0)
             + int(sleep.get(user.id) or 0)
         )

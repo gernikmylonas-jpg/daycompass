@@ -203,6 +203,7 @@ class UserSettings(Base):
     mode = Column(String, nullable=False, default="system")  # light | dark | system
     needle_cursor = Column(Boolean, nullable=False, default=True)
     language = Column(String, nullable=True)
+    mood_style = Column(String, nullable=False, default="emoji")  # emoji | colors | words
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
@@ -219,3 +220,28 @@ class CalendarEvent(Base):
     notes = Column(Text, nullable=True)
     repeat_yearly = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+# ─── Mood (1-10 a day) and meditation ───────────────────
+
+class MoodLog(Base):
+    __tablename__ = "mood_logs"
+    __table_args__ = (UniqueConstraint("user_id", "log_date", name="uq_mood_day"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    log_date = Column(Date, nullable=False, default=date.today)
+    score = Column(Integer, nullable=False)  # 1..10
+    note = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class MeditationSession(Base):
+    __tablename__ = "meditation_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    kind = Column(String, nullable=False, default="breathing")  # breathing | silent
+    duration_minutes = Column(Integer, nullable=False)
+    session_date = Column(Date, nullable=False, default=date.today)
+    completed_at = Column(DateTime, nullable=False, default=datetime.utcnow)

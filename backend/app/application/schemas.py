@@ -136,6 +136,7 @@ class GroupSummary(BaseModel):
     is_owner: bool
     member_count: int
     my_rank: int
+    new_badges: list[BadgeInfo] = []
 
 
 class LeaderboardEntry(BaseModel):
@@ -172,6 +173,7 @@ class StepLogResponse(BaseModel):
     steps: int
     goal_reached: bool
     points_awarded: int
+    new_badges: list[BadgeInfo] = []
 
 
 class SleepLogResponse(BaseModel):
@@ -180,6 +182,7 @@ class SleepLogResponse(BaseModel):
     quality: Optional[int] = None
     goal_reached: bool
     points_awarded: int
+    new_badges: list[BadgeInfo] = []
 
 
 class WellnessDay(BaseModel):
@@ -207,6 +210,7 @@ class SettingsPayload(BaseModel):
     mode: str
     needle_cursor: bool
     language: Optional[str] = None
+    mood_style: str = "emoji"
 
 
 class SettingsResponse(SettingsPayload):
@@ -229,6 +233,7 @@ class EventResponse(BaseModel):
     repeat_yearly: bool
     date: date           # the day this occurrence falls on
     original_date: date  # the day it was created for (birthdays repeat every year)
+    new_badges: list[BadgeInfo] = []
 
 
 class PointsSource(BaseModel):
@@ -240,6 +245,7 @@ class PointsBreakdown(BaseModel):
     total: int
     check_ins: PointsSource
     pomodoros: PointsSource
+    meditations: PointsSource
     steps: PointsSource
     sleep: PointsSource
     other: int  # total minus everything explained above (e.g. points kept from deleted habits)
@@ -254,6 +260,7 @@ class JournalEntryResponse(BaseModel):
     has_audio: bool = False
     audio_seconds: int = 0
     audio_mime: Optional[str] = None
+    new_badges: list[BadgeInfo] = []
 
 
 class JournalPage(BaseModel):
@@ -265,3 +272,81 @@ class JournalUpdate(BaseModel):
     entry_date: date
     content: str = ""
     mood: Optional[str] = None
+
+
+class StreakResponse(BaseModel):
+    current: int      # days in a row (up to today or yesterday) with at least one habit check-in
+    best: int
+    active_today: bool
+
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    current_password: Optional[str] = None  # required to change the email
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class MoodUpsert(BaseModel):
+    score: int
+    log_date: Optional[date] = None
+    note: Optional[str] = None
+
+
+class MoodDay(BaseModel):
+    date: date
+    score: int
+    note: Optional[str] = None
+
+
+class MoodLogResponse(MoodDay):
+    new_badges: list[BadgeInfo] = []
+
+
+class MoodSummary(BaseModel):
+    days: list[MoodDay]          # most recent first
+    today: Optional[int] = None
+    avg_7d: Optional[float] = None
+    avg_30d: Optional[float] = None
+    logged_total: int
+
+
+class MeditationCreate(BaseModel):
+    duration_minutes: int
+    kind: str = "breathing"
+
+
+class MeditationItem(BaseModel):
+    id: UUID
+    kind: str
+    duration_minutes: int
+    session_date: date
+    completed_at: datetime
+
+
+class MeditationResponse(MeditationItem):
+    points_awarded: int = 0
+    new_badges: list[BadgeInfo] = []
+
+
+class MeditationSummary(BaseModel):
+    today_minutes: int
+    today_sessions: int
+    total_minutes: int
+    total_sessions: int
+    current_streak: int
+    recent: list[MeditationItem]
+
+
+class WellnessHistory(BaseModel):
+    days: list[WellnessDay]  # newest first
+    total: int               # number of days that have any steps or sleep logged
+    steps_logged: int
+    avg_steps: int
+    best_steps: int
+    sleep_logged: int
+    avg_sleep_minutes: int

@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '../api'
 import { apiErrorMessage } from '../i18n/errors'
 import { intlLocale } from '../i18n'
+import { formatDate } from '../i18n/dates'
+import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 import DateField from './DateField.vue'
 import type { Category } from '../stores/habits'
 
@@ -43,6 +45,7 @@ const dotColor: Record<Category, string> = {
 }
 
 const { t, locale } = useI18n()
+const badgesStore = useBadgesStore()
 const loc = computed(() => intlLocale(locale.value))
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -236,7 +239,10 @@ async function save() {
   try {
     const payload = { title: f.title, event_date: f.date, kind: f.kind, notes: f.notes || null, repeat_yearly: f.repeat }
     if (f.id) await api.put(`/api/calendar/events/${f.id}`, payload)
-    else await api.post('/api/calendar/events', payload)
+    else {
+      const { data } = await api.post<{ new_badges?: BadgeInfo[] }>('/api/calendar/events', payload)
+      await badgesStore.announce(data.new_badges)
+    }
     form.value = null
     await load()
   } catch (e) {
@@ -257,8 +263,77 @@ async function removeEvent(ev: CalEvent) {
   }
 }
 
+// ── right-click menu: add something to the day you clicked ──────────────
+const menu = ref<{ x: number; y: number; date: string } | null>(null)
+const menuEl = ref<HTMLElement | null>(null)
+const titleInput = ref<HTMLInputElement | null>(null)
+let menuReturnFocus: HTMLElement | null = null
+
+async function openMenu(ev: MouseEvent, date: string) {
+  ev.preventDefault() // also fires for the keyboard "context menu" key / Shift+F10
+  select(date)
+  menuReturnFocus = ev.currentTarget as HTMLElement
+  const W = 220
+  const H = 230
+  menu.value = {
+    x: Math.max(8, Math.min(ev.clientX, window.innerWidth - W - 8)),
+    y: Math.max(8, Math.min(ev.clientY, window.innerHeight - H - 8)),
+    date,
+  }
+  await nextTick()
+  menuEl.value?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+}
+
+function closeMenu(restoreFocus = false) {
+  menu.value = null
+  if (restoreFocus) menuReturnFocus?.focus()
+}
+
+async function addFromMenu(kind: Kind) {
+  const date = menu.value?.date
+  closeMenu()
+  if (!date) return
+  selected.value = date
+  form.value = { id: null, title: '', kind, notes: '', repeat: kind === 'birthday', date }
+  await nextTick()
+  titleInput.value?.focus()
+}
+
+function onMenuKey(ev: KeyboardEvent) {
+  const items = [...(menuEl.value?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])]
+  const i = items.indexOf(document.activeElement as HTMLElement)
+  if (ev.key === 'ArrowDown') items[(i + 1) % items.length]?.focus()
+  else if (ev.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus()
+  else if (ev.key === 'Home') items[0]?.focus()
+  else if (ev.key === 'End') items[items.length - 1]?.focus()
+  else if (ev.key === 'Escape') {
+    ev.stopPropagation()
+    closeMenu(true)
+    return
+  } else if (ev.key === 'Tab') {
+    closeMenu()
+    return
+  } else return
+  ev.preventDefault()
+}
+
+function onOutside(ev: Event) {
+  if (menu.value && !menuEl.value?.contains(ev.target as Node)) closeMenu()
+}
+const dismiss = () => closeMenu()
+
 watch([view, year, month, weekStart], load)
-onMounted(load)
+onMounted(() => {
+  load()
+  document.addEventListener('pointerdown', onOutside)
+  window.addEventListener('scroll', dismiss, true)
+  window.addEventListener('resize', dismiss)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onOutside)
+  window.removeEventListener('scroll', dismiss, true)
+  window.removeEventListener('resize', dismiss)
+})
 </script>
 
 <template>
@@ -310,7 +385,7 @@ onMounted(load)
         <div class="grid grid-cols-7 gap-1">
           <template v-for="(c, i) in cells" :key="i">
             <div v-if="!c" />
-            <button v-else @click="select(c.date)" :aria-pressed="selected === c.date"
+            <button v-else @click="select(c.date)" @contextmenu="openMenu($event, c.date)" :aria-pressed="selected === c.date"
               :aria-label="fullDate(c.date)"
               :class="['h-14 rounded-lg border text-sm flex flex-col items-center justify-start pt-1 relative',
                 selected === c.date ? 'border-slate-800 bg-slate-50' : 'border-transparent hover:bg-slate-50',
@@ -329,7 +404,7 @@ onMounted(load)
       </template>
 
       <div v-else class="grid grid-cols-1 @lg:grid-cols-7 gap-2">
-        <button v-for="d in weekDays" :key="d.date" @click="select(d.date)" :aria-pressed="selected === d.date"
+        <button v-for="d in weekDays" :key="d.date" @click="select(d.date)" @contextmenu="openMenu($event, d.date)" :aria-pressed="selected === d.date"
           :aria-label="fullDate(d.date)"
           :class="['text-left rounded-lg border p-2 min-h-24',
             selected === d.date ? 'border-slate-800' : d.date === todayIso ? 'border-teal-500 bg-teal-50' : 'border-slate-200']">
@@ -345,7 +420,21 @@ onMounted(load)
           </ul>
         </button>
       </div>
+      <p class="text-xs text-slate-500 mt-3">{{ t('calendar.rightClickHint') }}</p>
     </section>
+
+    <Teleport to="body">
+      <div v-if="menu" id="calendar-context-menu" ref="menuEl" role="menu"
+        :aria-label="t('calendar.addOn', { date: formatDate(menu.date) })"
+        :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @keydown="onMenuKey"
+        class="fixed z-[3000] w-52 bg-surface border border-slate-300 rounded-lg shadow-lg py-1 text-sm">
+        <p class="px-3 py-1 text-xs text-slate-500">{{ t('calendar.addOn', { date: formatDate(menu.date) }) }}</p>
+        <button v-for="k in KINDS" :key="k" type="button" role="menuitem" tabindex="-1" @click="addFromMenu(k)"
+          class="w-full flex items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 focus-visible:bg-slate-100">
+          <span aria-hidden="true">{{ KIND_ICON[k] }}</span> {{ t(`calendar.kinds.${k}`) }}
+        </button>
+      </div>
+    </Teleport>
 
     <!-- the chosen day: habits done, notes, and the note form -->
     <section v-if="selected" class="bg-surface rounded-xl shadow p-4 space-y-3" aria-live="polite">
@@ -384,7 +473,7 @@ onMounted(load)
       <p v-if="!selectedEvents.length && !selectedEntries.length && !form" class="text-slate-500 text-sm">{{ t('calendar.nothing') }}</p>
 
       <form v-if="form" @submit.prevent="save" class="space-y-2 border-t border-slate-200 pt-3">
-        <input v-model="form.title" type="text" maxlength="100" required
+        <input ref="titleInput" v-model="form.title" type="text" maxlength="100" required
           :placeholder="t('calendar.titlePlaceholder')" :aria-label="t('calendar.titlePlaceholder')"
           class="w-full border rounded-lg px-3 py-2 text-sm" />
         <div class="flex flex-wrap gap-2">

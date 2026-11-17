@@ -1,22 +1,23 @@
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
 from app.domain.models import StepLog, SleepLog, User
 from app.application.schemas import (
-    StepLogUpsert, StepLogResponse, SleepLogUpsert, SleepLogResponse, WellnessDay, WellnessSummary,
+    StepLogUpsert, StepLogResponse, SleepLogUpsert, SleepLogResponse, WellnessDay, WellnessSummary, BadgeInfo, WellnessHistory,
 )
 from app.application.services.points import (
     STEP_GOAL, SLEEP_GOAL_MINUTES, POINTS_PER_STEP_GOAL, POINTS_PER_SLEEP_GOAL,
 )
 from app.application.services.realtime import notify_user_groups
+from app.application.services.badges import award_badges
 
 router = APIRouter(prefix="/api/wellness", tags=["wellness"])
 
 MAX_STEPS = 100_000
 MAX_SLEEP_MINUTES = 24 * 60
-MAX_BACKFILL_DAYS = 30
+EARLIEST_DATE = date(2000, 1, 1)  # sanity floor only; there is no retention limit
 SUMMARY_DAYS = 14
 
 
@@ -25,8 +26,8 @@ def _resolve_date(requested: date | None) -> date:
     day = requested or today
     if day > today:
         raise HTTPException(status_code=422, detail="Date cannot be in the future")
-    if (today - day).days > MAX_BACKFILL_DAYS:
-        raise HTTPException(status_code=422, detail=f"Date cannot be older than {MAX_BACKFILL_DAYS} days")
+    if day < EARLIEST_DATE:
+        raise HTTPException(status_code=422, detail="Date cannot be before 2000")
     return day
 
 
@@ -53,11 +54,13 @@ def log_steps(payload: StepLogUpsert, user_id: str = Depends(get_current_user_id
         log.steps = payload.steps
 
     gained = _award(db, user_id, log, log.steps >= STEP_GOAL, POINTS_PER_STEP_GOAL)
+    new_badges = award_badges(db, user_id)
     db.commit()
     if gained:
         notify_user_groups(db, user_id)
     return StepLogResponse(
         log_date=day, steps=log.steps, goal_reached=log.steps >= STEP_GOAL, points_awarded=gained,
+        new_badges=[BadgeInfo.model_validate(b) for b in new_badges],
     )
 
 
@@ -78,12 +81,14 @@ def log_sleep(payload: SleepLogUpsert, user_id: str = Depends(get_current_user_i
         log.quality = payload.quality
 
     gained = _award(db, user_id, log, log.minutes >= SLEEP_GOAL_MINUTES, POINTS_PER_SLEEP_GOAL)
+    new_badges = award_badges(db, user_id)
     db.commit()
     if gained:
         notify_user_groups(db, user_id)
     return SleepLogResponse(
         log_date=day, minutes=log.minutes, quality=log.quality,
         goal_reached=log.minutes >= SLEEP_GOAL_MINUTES, points_awarded=gained,
+        new_badges=[BadgeInfo.model_validate(b) for b in new_badges],
     )
 
 
@@ -121,3 +126,55 @@ def summary(user_id: str = Depends(get_current_user_id), db: Session = Depends(g
         avg_sleep_minutes_7d=round(sum(sleep_values) / len(sleep_values)) if sleep_values else 0,
         days=days,
     )
+
+
+@router.get("/history", response_model=WellnessHistory)
+def history(
+    limit: int = Query(30, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    kind: str | None = Query(None, pattern="^(steps|sleep)$"),
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """The complete history of logged days (newest first, paged) plus all-time figures."""
+    steps = {l.log_date: l.steps for l in db.query(StepLog).filter(StepLog.user_id == user_id)}
+    sleeps = {l.log_date: l for l in db.query(SleepLog).filter(SleepLog.user_id == user_id)}
+    dates = sorted({'steps': set(steps), 'sleep': set(sleeps)}.get(kind or '', set(steps) | set(sleeps)), reverse=True)
+
+    days = []
+    for d in dates[offset:offset + limit]:
+        sl = sleeps.get(d)
+        days.append(WellnessDay(
+            date=d, steps=steps.get(d),
+            sleep_minutes=sl.minutes if sl else None, sleep_quality=sl.quality if sl else None,
+        ))
+    sleep_minutes = [l.minutes for l in sleeps.values()]
+    return WellnessHistory(
+        days=days,
+        total=len(dates),
+        steps_logged=len(steps),
+        avg_steps=round(sum(steps.values()) / len(steps)) if steps else 0,
+        best_steps=max(steps.values(), default=0),
+        sleep_logged=len(sleeps),
+        avg_sleep_minutes=round(sum(sleep_minutes) / len(sleep_minutes)) if sleep_minutes else 0,
+    )
+
+
+@router.delete("/steps/{log_date}")
+def delete_steps(log_date: date, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    log = db.query(StepLog).filter(StepLog.user_id == user_id, StepLog.log_date == log_date).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    db.delete(log)  # points already earned for that day are kept
+    db.commit()
+    return {"detail": "Steps entry deleted"}
+
+
+@router.delete("/sleep/{log_date}")
+def delete_sleep(log_date: date, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    log = db.query(SleepLog).filter(SleepLog.user_id == user_id, SleepLog.log_date == log_date).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    db.delete(log)
+    db.commit()
+    return {"detail": "Sleep entry deleted"}

@@ -1,8 +1,8 @@
 from datetime import date, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from app.domain.models import User, Habit, CheckIn, PomodoroSession, GroupMember, StepLog, SleepLog
-from app.application.services.points import POINTS_PER_CHECK_IN, POINTS_PER_POMODORO
+from app.domain.models import User, Habit, CheckIn, PomodoroSession, GroupMember, StepLog, SleepLog, MeditationSession
+from app.application.services.points import POINTS_PER_CHECK_IN, POINTS_PER_POMODORO, POINTS_PER_MEDITATION
 
 WEEK_DAYS = 7
 
@@ -27,6 +27,14 @@ def _weekly_points(db: Session, user_ids: list) -> dict:
     )
     for uid, count in pomodoros:
         points[uid] += count * POINTS_PER_POMODORO
+
+    meditations = (
+        db.query(MeditationSession.user_id, func.count(MeditationSession.id))
+        .filter(MeditationSession.user_id.in_(user_ids), MeditationSession.session_date >= since)
+        .group_by(MeditationSession.user_id)
+    )
+    for uid, count in meditations:
+        points[uid] += count * POINTS_PER_MEDITATION
 
     for model in (StepLog, SleepLog):
         awarded = (

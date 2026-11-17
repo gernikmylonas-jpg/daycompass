@@ -7,10 +7,11 @@ from app.infrastructure.database import get_db, SessionLocal
 from app.infrastructure.security import get_current_user_id, decode_token
 from app.domain.models import Group, GroupMember
 from app.application.schemas import (
-    GroupCreate, GroupJoin, GroupSummary, GroupDetail, LeaderboardEntry,
+    GroupCreate, GroupJoin, GroupSummary, GroupDetail, LeaderboardEntry, BadgeInfo,
 )
 from app.application.services.leaderboard import group_leaderboard
 from app.application.services.realtime import hub, notify_groups
+from app.application.services.badges import award_badges
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
@@ -89,9 +90,12 @@ def create_group(payload: GroupCreate, user_id: str = Depends(get_current_user_i
     db.add(group)
     db.flush()
     db.add(GroupMember(group_id=group.id, user_id=user_id))
+    new_badges = award_badges(db, user_id)
     db.commit()
     db.refresh(group)
-    return _summary(db, group, user_id)
+    summary = _summary(db, group, user_id)
+    summary.new_badges = [BadgeInfo.model_validate(b) for b in new_badges]
+    return summary
 
 
 @router.post("/join", response_model=GroupSummary)
@@ -104,9 +108,12 @@ def join_group(payload: GroupJoin, user_id: str = Depends(get_current_user_id), 
         raise HTTPException(status_code=409, detail="Already a member of this group")
 
     db.add(GroupMember(group_id=group.id, user_id=user_id))
+    new_badges = award_badges(db, user_id)
     db.commit()
     notify_groups([group.id])
-    return _summary(db, group, user_id)
+    summary = _summary(db, group, user_id)
+    summary.new_badges = [BadgeInfo.model_validate(b) for b in new_badges]
+    return summary
 
 
 @router.get("/{group_id}", response_model=GroupDetail)

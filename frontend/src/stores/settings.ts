@@ -6,6 +6,7 @@ import { useAuthStore } from './auth'
 
 export type ThemeId = 'classic' | 'modern' | 'retro' | 'nautical' | 'explorer' | 'neon' | 'minimal'
 export type ThemeMode = 'light' | 'dark' | 'system'
+export type MoodStyle = 'emoji' | 'colors' | 'words'
 
 export interface ThemeInfo {
   id: ThemeId
@@ -24,16 +25,19 @@ export const THEMES: ThemeInfo[] = [
 ]
 
 export const MODES: ThemeMode[] = ['light', 'dark', 'system']
+export const MOOD_STYLES: MoodStyle[] = ['emoji', 'colors', 'words']
 
 const THEME_KEY = 'theme'
 const MODE_KEY = 'mode'
 const NEEDLE_KEY = 'needleCursor'
+const MOOD_KEY = 'moodStyle'
 const DEFAULT_THEME: ThemeId = 'classic'
 const SAVE_DELAY_MS = 500
 
 const isTheme = (v: unknown): v is ThemeId => THEMES.some((t) => t.id === v)
 const isMode = (v: unknown): v is ThemeMode => MODES.includes(v as ThemeMode)
 const isLocale = (v: unknown): v is LocaleCode => LOCALES.some((l) => l.code === v)
+const isMoodStyle = (v: unknown): v is MoodStyle => MOOD_STYLES.includes(v as MoodStyle)
 
 function read(key: string): string | null {
   try {
@@ -56,6 +60,7 @@ interface ServerSettings {
   mode: string
   needle_cursor: boolean
   language: string | null
+  mood_style?: string
   saved: boolean
 }
 
@@ -69,6 +74,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<ThemeId>(isTheme(storedTheme) ? storedTheme : DEFAULT_THEME)
   const mode = ref<ThemeMode>(isMode(storedMode) ? storedMode : 'system')
   const needleCursor = ref(read(NEEDLE_KEY) !== 'off')
+  const storedMood = read(MOOD_KEY)
+  const moodStyle = ref<MoodStyle>(isMoodStyle(storedMood) ? storedMood : 'emoji')
 
   const mq = window.matchMedia('(prefers-color-scheme: dark)')
   const systemDark = ref(mq.matches)
@@ -96,6 +103,7 @@ export const useSettingsStore = defineStore('settings', () => {
         mode: mode.value,
         needle_cursor: needleCursor.value,
         language: i18n.global.locale.value,
+        mood_style: moodStyle.value,
       })
       syncError.value = false
     } catch {
@@ -121,6 +129,7 @@ export const useSettingsStore = defineStore('settings', () => {
       if (isTheme(data.theme)) theme.value = data.theme
       if (isMode(data.mode)) mode.value = data.mode
       needleCursor.value = data.needle_cursor
+      if (isMoodStyle(data.mood_style)) moodStyle.value = data.mood_style
       if (isLocale(data.language)) setLocale(data.language)
       // let the watchers below run once while hydrating, so they do not echo it back
       await Promise.resolve()
@@ -147,6 +156,10 @@ export const useSettingsStore = defineStore('settings', () => {
     scheduleSave()
   })
   watch(() => i18n.global.locale.value, scheduleSave)
+  watch(moodStyle, (value) => {
+    write(MOOD_KEY, value)
+    scheduleSave()
+  })
 
   function setTheme(id: ThemeId) {
     theme.value = id
@@ -156,5 +169,9 @@ export const useSettingsStore = defineStore('settings', () => {
     mode.value = value
   }
 
-  return { theme, mode, resolvedMode, needleCursor, syncError, setTheme, setMode, loadFromServer }
+  function setMoodStyle(value: MoodStyle) {
+    moodStyle.value = value
+  }
+
+  return { theme, mode, resolvedMode, needleCursor, moodStyle, syncError, setTheme, setMode, setMoodStyle, loadFromServer }
 })

@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '../api'
 import { useAuthStore } from '../stores/auth'
+import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 import { apiErrorMessage } from '../i18n/errors'
 import { intlLocale } from '../i18n'
 import { formatDate, parseIso } from '../i18n/dates'
@@ -26,14 +27,33 @@ interface Summary {
 interface LogResult {
   goal_reached: boolean
   points_awarded: number
+  new_badges?: BadgeInfo[]
 }
 
-const MAX_BACKFILL_DAYS = 30
+interface History {
+  days: WellnessDay[]
+  total: number
+  steps_logged: number
+  avg_steps: number
+  best_steps: number
+  sleep_logged: number
+  avg_sleep_minutes: number
+}
+
+const EARLIEST = '2000-01-01' // no limit on how far back you can log; this is only a sanity floor
+const PAGE = 30
 const POINTS_STEPS = 10
 const POINTS_SLEEP = 10
 
+// Steps and sleep share one data source; the panel can show either part or both.
+const props = withDefaults(defineProps<{ parts?: ('steps' | 'sleep')[] }>(), { parts: () => ['steps', 'sleep'] })
+const emit = defineEmits<{ saved: [] }>()
+const showSteps = computed(() => props.parts.includes('steps'))
+const showSleep = computed(() => props.parts.includes('sleep'))
+
 const { t, locale } = useI18n()
 const auth = useAuthStore()
+const badgesStore = useBadgesStore()
 
 function toIso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -41,7 +61,6 @@ function toIso(d: Date) {
 
 const today = new Date()
 const maxDate = toIso(today)
-const minDate = toIso(new Date(today.getFullYear(), today.getMonth(), today.getDate() - MAX_BACKFILL_DAYS))
 
 const summary = ref<Summary | null>(null)
 const date = ref(maxDate)
@@ -67,8 +86,35 @@ function formatDay(iso: string) {
 const stepGoal = computed(() => summary.value?.step_goal ?? 8000)
 const sleepGoal = computed(() => summary.value?.sleep_goal_minutes ?? 420)
 
-// newest first for the history list
-const history = computed(() => [...(summary.value?.days ?? [])].reverse())
+// The complete history, newest first, loaded a page at a time
+const histKind = computed(() => (showSteps.value && showSleep.value ? undefined : showSteps.value ? 'steps' : 'sleep'))
+const history = ref<WellnessDay[]>([])
+const stats = ref<History | null>(null)
+
+async function loadHistory(reset: boolean) {
+  try {
+    const { data } = await api.get<History>('/api/wellness/history', {
+      params: { limit: PAGE, offset: reset ? 0 : history.value.length, kind: histKind.value },
+    })
+    history.value = reset ? data.days : [...history.value, ...data.days]
+    stats.value = data
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  }
+}
+
+async function removeDay(d: WellnessDay) {
+  if (!confirm(t('wellness.confirmDelete', { date: formatDate(d.date) }))) return
+  error.value = ''
+  try {
+    if (showSteps.value && d.steps != null) await api.delete(`/api/wellness/steps/${d.date}`)
+    if (showSleep.value && d.sleep_minutes != null) await api.delete(`/api/wellness/sleep/${d.date}`)
+    await Promise.all([load(), loadHistory(true)])
+    emit('saved')
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  }
+}
 
 function fillForm() {
   const day = summary.value?.days.find((d) => d.date === date.value)
@@ -98,10 +144,12 @@ async function afterSave(result: LogResult) {
     ? t('wellness.pointsEarned', { n: result.points_awarded })
     : t('wellness.saved')
   if (result.points_awarded > 0) await auth.refreshUser().catch(() => {})
+  await badgesStore.announce(result.new_badges)
   const keepDate = date.value
-  await load()
+  await Promise.all([load(), loadHistory(true)])
   date.value = keepDate
   fillForm()
+  emit('saved')
 }
 
 async function saveSteps() {
@@ -155,7 +203,10 @@ watch(date, () => {
   message.value = ''
   fillForm()
 })
-onMounted(load)
+onMounted(() => {
+  load()
+  loadHistory(true)
+})
 </script>
 
 <template>
@@ -163,13 +214,13 @@ onMounted(load)
     <p v-if="error" role="alert" class="text-danger text-sm">{{ error }}</p>
     <p v-if="message" role="status" class="text-ok text-sm font-medium">{{ message }}</p>
 
-    <section v-if="summary" class="grid grid-cols-2 gap-4">
-      <div class="bg-surface rounded-xl shadow p-4 border-t-4 border-teal-500">
+    <section v-if="summary" :class="['grid gap-4', showSteps && showSleep ? 'grid-cols-2' : 'grid-cols-1']">
+      <div v-if="showSteps" class="bg-surface rounded-xl shadow p-4 border-t-4 border-teal-500">
         <p class="text-sm text-slate-500">{{ t('wellness.avgSteps') }}</p>
         <p class="text-2xl font-bold text-slate-800">{{ summary.avg_steps_7d.toLocaleString(loc) }}</p>
         <p class="text-xs text-slate-500">{{ t('wellness.goalSteps', { n: stepGoal.toLocaleString(loc) }) }}</p>
       </div>
-      <div class="bg-surface rounded-xl shadow p-4 border-t-4 border-purple-500">
+      <div v-if="showSleep" class="bg-surface rounded-xl shadow p-4 border-t-4 border-indigo-500">
         <p class="text-sm text-slate-500">{{ t('wellness.avgSleep') }}</p>
         <p class="text-2xl font-bold text-slate-800">{{ formatDuration(summary.avg_sleep_minutes_7d) }}</p>
         <p class="text-xs text-slate-500">{{ t('wellness.goalSleep', { n: formatDuration(sleepGoal) }) }}</p>
@@ -181,11 +232,11 @@ onMounted(load)
         <h2 class="font-bold text-slate-800">{{ t('wellness.logTitle') }}</h2>
         <div class="flex items-center gap-2 text-sm text-slate-600">
           <span>{{ t('wellness.date') }}</span>
-          <DateField v-model="date" :min="minDate" :max="maxDate" :label="t('wellness.date')" required />
+          <DateField v-model="date" :min="EARLIEST" :max="maxDate" :label="t('wellness.date')" required />
         </div>
       </div>
 
-      <form @submit.prevent="saveSteps" class="flex flex-wrap items-end gap-3">
+      <form v-if="showSteps" @submit.prevent="saveSteps" class="flex flex-wrap items-end gap-3">
         <label class="text-sm text-slate-600 flex-1 min-w-40">
           {{ t('wellness.steps') }}
           <input v-model.number="steps" type="number" min="0" max="100000" step="1" required
@@ -198,7 +249,7 @@ onMounted(load)
         </button>
       </form>
 
-      <form @submit.prevent="saveSleep" class="space-y-3">
+      <form v-if="showSleep" @submit.prevent="saveSleep" class="space-y-3">
         <div class="flex flex-wrap items-end gap-3">
           <label class="text-sm text-slate-600">
             {{ t('wellness.sleep') }} ({{ t('wellness.hours') }})
@@ -225,34 +276,47 @@ onMounted(load)
       </form>
 
       <p class="text-xs text-slate-500">
-        {{ t('wellness.hint', { steps: POINTS_STEPS, sleep: POINTS_SLEEP }) }}
+        {{ showSteps && showSleep ? t('wellness.hint', { steps: POINTS_STEPS, sleep: POINTS_SLEEP })
+          : showSteps ? t('wellness.hintSteps', { n: POINTS_STEPS }) : t('wellness.hintSleep', { n: POINTS_SLEEP }) }}
       </p>
     </section>
 
-    <section v-if="summary" class="bg-surface rounded-xl shadow p-4">
-      <h2 class="font-bold text-slate-800 mb-2">{{ t('wellness.last14') }}</h2>
-      <ul class="divide-y">
+    <section v-if="stats" class="bg-surface rounded-xl shadow p-4">
+      <h2 class="font-bold text-slate-800 mb-1">{{ t('wellness.history') }}</h2>
+      <p class="text-xs text-slate-500 mb-3">
+        <template v-if="showSteps">{{ t('wellness.allTimeSteps', { days: stats.steps_logged, avg: stats.avg_steps.toLocaleString(loc), best: stats.best_steps.toLocaleString(loc) }) }}</template>
+        <template v-if="showSteps && showSleep"><br /></template>
+        <template v-if="showSleep">{{ t('wellness.allTimeSleep', { days: stats.sleep_logged, avg: formatDuration(stats.avg_sleep_minutes) }) }}</template>
+      </p>
+      <ul v-if="history.length" class="divide-y">
         <li v-for="d in history" :key="d.date" class="py-2 text-sm">
           <div class="flex items-center justify-between text-slate-700 mb-1">
             <span class="font-medium">{{ formatDay(d.date) }}</span>
-            <span class="text-slate-500">
-              <template v-if="d.steps != null || d.sleep_minutes != null">
-                <span v-if="d.steps != null">👟 {{ d.steps.toLocaleString(loc) }}</span>
-                <span v-if="d.sleep_minutes != null" class="ml-3">😴 {{ formatDuration(d.sleep_minutes) }}</span>
+            <span class="text-slate-500 flex items-center gap-1">
+              <template v-if="(showSteps && d.steps != null) || (showSleep && d.sleep_minutes != null)">
+                <span v-if="showSteps && d.steps != null">👟 {{ d.steps.toLocaleString(loc) }}</span>
+                <span v-if="showSleep && d.sleep_minutes != null" :class="showSteps ? 'ml-3' : ''">😴 {{ formatDuration(d.sleep_minutes) }}<span v-if="d.sleep_quality" class="text-xs"> · {{ d.sleep_quality }}/5</span></span>
               </template>
               <span v-else class="text-slate-500">{{ t('wellness.noData') }}</span>
+              <button @click="removeDay(d)" :aria-label="t('home.remove')" :title="t('home.remove')"
+                class="w-6 h-6 inline-flex items-center justify-center rounded text-slate-500 hover:text-danger hover:bg-slate-100">✕</button>
             </span>
           </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div class="h-1.5 rounded bg-slate-100 overflow-hidden">
+          <div :class="['grid gap-2', showSteps && showSleep ? 'grid-cols-2' : 'grid-cols-1']">
+            <div v-if="showSteps" class="h-1.5 rounded bg-slate-100 overflow-hidden">
               <div class="h-full bg-teal-500" :style="{ width: stepsPercent(d.steps) + '%' }" />
             </div>
-            <div class="h-1.5 rounded bg-slate-100 overflow-hidden">
-              <div class="h-full bg-purple-500" :style="{ width: sleepPercent(d.sleep_minutes) + '%' }" />
+            <div v-if="showSleep" class="h-1.5 rounded bg-slate-100 overflow-hidden">
+              <div class="h-full bg-indigo-500" :style="{ width: sleepPercent(d.sleep_minutes) + '%' }" />
             </div>
           </div>
         </li>
       </ul>
+      <p v-else class="text-sm text-slate-500">{{ t('wellness.noHistory') }}</p>
+      <button v-if="history.length < stats.total" @click="loadHistory(false)"
+        class="mt-3 w-full border border-slate-400 text-slate-600 rounded-lg px-3 py-1.5 text-sm hover:bg-slate-50">
+        {{ t('wellness.showMore', { n: stats.total - history.length }) }}
+      </button>
     </section>
   </div>
 </template>

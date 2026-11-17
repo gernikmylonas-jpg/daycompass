@@ -17,8 +17,12 @@ import CalendarPanel from '../components/CalendarPanel.vue'
 import WellnessPanel from '../components/WellnessPanel.vue'
 import AstronomyPanel from '../components/AstronomyPanel.vue'
 import JournalPanel from '../components/JournalPanel.vue'
+import MoodPanel from '../components/MoodPanel.vue'
+import MeditationPanel from '../components/MeditationPanel.vue'
 import HomeGuide, { type GuideItem } from '../components/HomeGuide.vue'
 import BadgeToast from '../components/BadgeToast.vue'
+import UserChip from '../components/UserChip.vue'
+import { useStreakStore } from '../stores/streak'
 import { useBadgesStore } from '../stores/badges'
 
 const { t, locale } = useI18n()
@@ -26,6 +30,7 @@ const auth = useAuthStore()
 const settings = useSettingsStore()
 const habitsStore = useHabitsStore()
 const badgesStore = useBadgesStore()
+const streakStore = useStreakStore()
 const router = useRouter()
 
 const error = ref('')
@@ -49,7 +54,7 @@ const selectedHabit = computed(
 
 // ── the eight compass directions ─────────────────────────────────────────
 type DirId = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw'
-type Kind = 'habits' | 'pomodoro' | 'groups' | 'calendar' | 'soon'
+type Kind = 'habits' | 'pomodoro' | 'groups' | 'calendar' | 'sleep' | 'soon'
 
 interface Direction {
   id: DirId
@@ -69,8 +74,8 @@ const pomodoroToday = ref(0)
 const directions = computed<Direction[]>(() => [
   { id: 'n', kind: 'habits', category: 'body', angle: 0, title: t('home.north.title'), subtitle: t('home.north.subtitle'),
     accentVar: '--color-teal-500', accentBorder: 'border-teal-500', side: 'right' },
-  { id: 'ne', kind: 'soon', angle: 45, title: t('home.northeast'), subtitle: t('home.comingSoon'),
-    accentVar: '--color-slate-400', accentBorder: 'border-slate-400', side: 'right' },
+  { id: 'ne', kind: 'sleep', angle: 45, title: t('home.northeast.title'), subtitle: t('home.northeast.subtitle'),
+    accentVar: '--color-indigo-500', accentBorder: 'border-indigo-500', side: 'right' },
   { id: 'e', kind: 'habits', category: 'schedule', angle: 90, title: t('home.east.title'), subtitle: t('home.east.subtitle'),
     accentVar: '--color-pink-500', accentBorder: 'border-pink-500', side: 'right' },
   { id: 'se', kind: 'calendar', angle: 135, title: t('home.southeast.title'), subtitle: t('home.southeast.subtitle'),
@@ -104,7 +109,22 @@ function doneIn(category: Category) {
   return habitsIn(category).filter((h) => h.checked_in_today).length
 }
 
+// sleep logged for today, for the ring on the sleep letter
+const sleepToday = ref(0)
+const sleepGoal = ref(420)
+
+async function loadSleepToday() {
+  try {
+    const { data } = await api.get<{ sleep_goal_minutes: number; days: { sleep_minutes: number | null }[] }>('/api/wellness/summary')
+    sleepGoal.value = data.sleep_goal_minutes
+    sleepToday.value = data.days[data.days.length - 1]?.sleep_minutes ?? 0
+  } catch {
+    // the ring simply stays empty
+  }
+}
+
 function progressOf(d: Direction) {
+  if (d.kind === 'sleep') return { done: Math.min(sleepToday.value, sleepGoal.value), total: sleepGoal.value }
   if (d.kind === 'habits' && d.category) return { done: doneIn(d.category), total: habitsIn(d.category).length }
   if (d.kind === 'pomodoro') return { done: Math.min(pomodoroToday.value, POMODORO_DAILY_TARGET), total: POMODORO_DAILY_TARGET }
   return { done: 0, total: 0 }
@@ -113,6 +133,10 @@ function progressOf(d: Direction) {
 function directionLabel(d: Direction) {
   if (d.kind === 'soon') return t('home.comingSoonLabel', { name: d.title })
   if (d.kind === 'groups' || d.kind === 'calendar') return `${d.title}: ${d.subtitle}`
+  if (d.kind === 'sleep') {
+    const time = t('wellness.duration', { h: Math.floor(sleepToday.value / 60), m: sleepToday.value % 60 })
+    return t('home.sleepLabel', { name: d.title, time })
+  }
   const p = progressOf(d)
   return t(d.kind === 'pomodoro' ? 'home.pomodoroLabel' : 'home.directionLabel', { name: d.title, done: p.done, total: p.total })
 }
@@ -127,15 +151,25 @@ const panelTitleEl = ref<HTMLElement | null>(null)
 const medallionEls: Partial<Record<DirId, HTMLElement>> = {}
 
 // An extra option inside a direction's card (like steps & sleep in the north)
-type ExtraKey = 'wellness' | 'astronomy' | 'journal'
+type ExtraKey = 'wellness' | 'astronomy' | 'journal' | 'mood' | 'meditation'
 const openExtra = ref<ExtraKey | null>(null)
-const extra = computed<{ key: ExtraKey; icon: string; label: string } | null>(() => {
+const extras = computed<{ key: ExtraKey; icon: string; label: string }[]>(() => {
   switch (openDirection.value?.id) {
-    case 'n': return { key: 'wellness', icon: '👟', label: t('home.stepsHistory') }
-    case 'e': return { key: 'astronomy', icon: '🌙', label: t('home.astronomyOption') }
-    case 's': return { key: 'journal', icon: '📓', label: t('home.journalOption') }
-    default: return null
+    case 'n': return [{ key: 'wellness', icon: '👟', label: t('home.stepsHistory') }]
+    case 'e': return [{ key: 'astronomy', icon: '🌙', label: t('home.astronomyOption') }]
+    case 's': return [
+      { key: 'journal', icon: '📓', label: t('home.journalOption') },
+      { key: 'mood', icon: '🙂', label: t('home.moodOption') },
+      { key: 'meditation', icon: '🧘', label: t('home.meditationOption') },
+    ]
+    default: return []
   }
+})
+
+// the meditation timer keeps running while you look at something else, so once opened it stays mounted
+const meditationMounted = ref(false)
+watch(openExtra, (key) => {
+  if (key === 'meditation') meditationMounted.value = true
 })
 
 function setMedallion(id: DirId, el: unknown) {
@@ -195,7 +229,7 @@ function closeGuide() {
 // Esc closes the guide first, then the open direction panel — unless a menu is open (it takes Esc)
 function onEscape(ev: KeyboardEvent) {
   if (ev.key !== 'Escape') return
-  if (document.querySelector('#settings-panel, #language-menu')) return
+  if (document.querySelector('#settings-panel, #language-menu, #calendar-context-menu')) return
   if (guideOpen.value) {
     closeGuide()
     return
@@ -278,6 +312,7 @@ async function toggle(habit: Habit) {
   try {
     const newBadges = await habitsStore.checkIn(habit)
     await auth.refreshUser()
+    streakStore.fetch()
     bumpId.value = directions.value.find((d) => d.category === habit.category)?.id ?? null
     window.setTimeout(() => (bumpId.value = null), 600)
     await badgesStore.announce(newBadges)
@@ -336,6 +371,43 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matc
 const dialEl = ref<HTMLElement | null>(null)
 const dialFace = ref<InstanceType<typeof CompassDial> | null>(null)
 
+// The centre symbol turns a full 360° to face the pointer, as a damped spring (it overshoots a
+// little and settles). It keeps its last heading while the pointer is right over the middle,
+// where the bearing is meaningless, and stays still for reduced motion.
+const emblemEl = ref<HTMLElement | null>(null)
+const EMBLEM_STIFFNESS = 55
+const EMBLEM_DAMPING = 2 * Math.sqrt(EMBLEM_STIFFNESS) * 0.65
+let emblemAngle = 0
+let emblemTarget = 0
+let emblemVelocity = 0
+let emblemRaf = 0
+let emblemLast = 0
+
+const wrap180 = (deg: number) => ((((deg + 180) % 360) + 360) % 360) - 180
+
+function emblemFrame(now: number) {
+  const dt = Math.min(0.033, (now - (emblemLast || now)) / 1000)
+  emblemLast = now
+  const diff = wrap180(emblemTarget - emblemAngle)
+  emblemVelocity += (EMBLEM_STIFFNESS * diff - EMBLEM_DAMPING * emblemVelocity) * dt
+  emblemAngle += emblemVelocity * dt
+  if (emblemEl.value) emblemEl.value.style.transform = `rotate(${emblemAngle.toFixed(2)}deg)`
+  if (Math.abs(diff) < 0.05 && Math.abs(emblemVelocity) < 0.5) {
+    emblemRaf = 0 // settled: stop the loop until the pointer moves again
+    return
+  }
+  emblemRaf = requestAnimationFrame(emblemFrame)
+}
+
+function aimEmblem(bearing: number) {
+  if (reducedMotion) return
+  emblemTarget = bearing
+  if (!emblemRaf) {
+    emblemLast = 0
+    emblemRaf = requestAnimationFrame(emblemFrame)
+  }
+}
+
 function onPointerMove(e: PointerEvent) {
   if (e.pointerType === 'touch' || !dialEl.value) return
   const rect = dialEl.value.getBoundingClientRect()
@@ -343,6 +415,7 @@ function onPointerMove(e: PointerEvent) {
   const dy = e.clientY - (rect.top + rect.height / 2)
   const bearing = (Math.atan2(dx, -dy) * 180) / Math.PI // clockwise from north
   dialFace.value?.highlight(((bearing % 360) + 360) % 360)
+  if (Math.hypot(dx, dy) > rect.width * 0.08) aimEmblem(bearing)
 }
 const onPointerGone = () => dialFace.value?.highlight(null)
 
@@ -352,13 +425,14 @@ onMounted(async () => {
   window.addEventListener('pointermove', onPointerMove, { passive: true })
   document.documentElement.addEventListener('mouseleave', onPointerGone)
   try {
-    await Promise.all([habitsStore.fetchHabits(), habitsStore.fetchHeatmap(), auth.refreshUser(), loadReminder()])
+    await Promise.all([habitsStore.fetchHabits(), habitsStore.fetchHeatmap(), auth.refreshUser(), loadReminder(), loadSleepToday()])
   } catch (e) {
     showError(e)
   }
 })
 
 onBeforeUnmount(() => {
+  cancelAnimationFrame(emblemRaf)
   document.removeEventListener('keydown', onEscape)
   document.removeEventListener('click', onDocumentClick)
   window.removeEventListener('pointermove', onPointerMove)
@@ -386,7 +460,7 @@ onBeforeUnmount(() => {
         </div>
 
         <nav class="flex flex-wrap items-center gap-x-4 gap-y-2" :aria-label="t('nav.label')">
-          <span class="text-slate-600 text-sm">{{ auth.user?.name }}</span>
+          <UserChip />
           <button @click="logout"
             class="bg-primary text-on-primary rounded-lg px-4 py-2 text-sm hover:bg-primary-hover">
             {{ t('nav.logout') }}
@@ -411,7 +485,9 @@ onBeforeUnmount(() => {
             :title="`${t('home.centerLabel')}: ${auth.user?.total_points ?? 0}`"
             class="absolute rounded-full bg-surface flex items-center justify-center"
             style="inset: 26%; border: 1px dashed var(--color-slate-400); box-shadow: inset 0 1px 6px rgb(0 0 0 / 0.1)">
-            <CompassEmblem :theme="settings.theme" class="p-[12%]" />
+            <div ref="emblemEl" class="w-full h-full p-[12%] will-change-transform">
+              <CompassEmblem :theme="settings.theme" />
+            </div>
           </RouterLink>
 
           <div v-for="d in directions" :key="d.id" class="absolute" :style="medallionStyle(d.angle)">
@@ -506,22 +582,28 @@ onBeforeUnmount(() => {
                 </form>
 
                 <!-- a separate option for this direction: steps & sleep (N), calendars (E), journal (S) -->
-                <div v-if="extra" class="border-t border-slate-200 pt-3">
-                  <button type="button" @click="openExtra = openExtra === extra.key ? null : extra.key"
-                    :aria-expanded="openExtra === extra.key"
+                <div v-if="extras.length" class="border-t border-slate-200 pt-3 space-y-1">
+                  <button v-for="x in extras" :key="x.key" type="button" @click="openExtra = openExtra === x.key ? null : x.key"
+                    :aria-expanded="openExtra === x.key"
                     class="w-full flex items-center justify-between rounded-lg px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                    <span><span aria-hidden="true">{{ extra.icon }}</span> {{ extra.label }}</span>
-                    <span aria-hidden="true">{{ openExtra === extra.key ? '▴' : '▾' }}</span>
+                    <span><span aria-hidden="true">{{ x.icon }}</span> {{ x.label }}</span>
+                    <span aria-hidden="true">{{ openExtra === x.key ? '▴' : '▾' }}</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            <WellnessPanel v-if="openExtra === 'wellness'" />
+            <WellnessPanel v-if="openExtra === 'wellness'" :parts="['steps']" />
+            <WellnessPanel v-if="openDirection.kind === 'sleep'" :parts="['sleep']" @saved="loadSleepToday" />
             <AstronomyPanel v-if="openExtra === 'astronomy'" />
             <JournalPanel v-if="openExtra === 'journal'" />
+            <MoodPanel v-if="openExtra === 'mood'" />
             <GroupsPanel v-if="openDirection.kind === 'groups'" />
             <CalendarPanel v-if="openDirection.kind === 'calendar'" />
+          </div>
+
+          <div v-if="meditationMounted" v-show="openDirection?.id === 's' && openExtra === 'meditation'" class="lg:w-[var(--panel-inner)] pb-4">
+            <MeditationPanel />
           </div>
 
           <!-- stays mounted while hidden, so a running timer keeps going when you open another letter -->

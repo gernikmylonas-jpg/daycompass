@@ -44,5 +44,10 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('user', JSON.stringify(data))
   }
 
-  return { token, user, isLoggedIn, login, register, logout, refreshUser }
+  function updateUser(next: User) {
+    user.value = next
+    localStorage.setItem('user', JSON.stringify(next))
+  }
+
+  return { token, user, isLoggedIn, login, register, logout, refreshUser, updateUser }
 })

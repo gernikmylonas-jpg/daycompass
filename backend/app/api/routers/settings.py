@@ -11,7 +11,8 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 THEMES = {"classic", "modern", "retro", "nautical", "explorer", "neon", "minimal"}
 MODES = {"light", "dark", "system"}
-DEFAULTS = SettingsPayload(theme="classic", mode="system", needle_cursor=True, language=None)
+MOOD_STYLES = {"emoji", "colors", "words"}
+DEFAULTS = SettingsPayload(theme="classic", mode="system", needle_cursor=True, language=None, mood_style="emoji")
 
 
 @router.get("", response_model=SettingsResponse)
@@ -20,7 +21,8 @@ def get_settings(user_id: str = Depends(get_current_user_id), db: Session = Depe
     if row is None:
         return SettingsResponse(**DEFAULTS.model_dump(), saved=False)
     return SettingsResponse(
-        theme=row.theme, mode=row.mode, needle_cursor=row.needle_cursor, language=row.language, saved=True,
+        theme=row.theme, mode=row.mode, needle_cursor=row.needle_cursor, language=row.language,
+        mood_style=row.mood_style, saved=True,
     )
 
 
@@ -36,6 +38,8 @@ def put_settings(
         raise HTTPException(status_code=422, detail="Invalid mode")
     if payload.language is not None and payload.language not in LANGUAGES:
         raise HTTPException(status_code=422, detail="Invalid language")
+    if payload.mood_style not in MOOD_STYLES:
+        raise HTTPException(status_code=422, detail="Invalid mood style")
 
     row = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
     if row is None:
@@ -45,6 +49,7 @@ def put_settings(
     row.mode = payload.mode
     row.needle_cursor = payload.needle_cursor
     row.language = payload.language
+    row.mood_style = payload.mood_style
     row.updated_at = datetime.utcnow()
     db.commit()
     return SettingsResponse(**payload.model_dump(), saved=True)

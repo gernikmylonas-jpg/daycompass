@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '../api'
 import { apiErrorMessage } from '../i18n/errors'
+import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 
 interface GroupSummary {
   id: string
@@ -33,6 +34,7 @@ interface GroupDetail {
 }
 
 const { t } = useI18n()
+const badgesStore = useBadgesStore()
 const groups = ref<GroupSummary[]>([])
 const selected = ref<GroupDetail | null>(null)
 const period = ref<'all' | 'week'>('all')
@@ -178,10 +180,11 @@ async function createGroup() {
   error.value = ''
   if (!newName.value.trim()) return
   try {
-    const { data } = await api.post<GroupSummary>('/api/groups', {
+    const { data } = await api.post<GroupSummary & { new_badges?: BadgeInfo[] }>('/api/groups', {
       name: newName.value,
       description: newDescription.value || null,
     })
+    await badgesStore.announce(data.new_badges)
     newName.value = ''
     newDescription.value = ''
     await loadGroups()
@@ -195,7 +198,8 @@ async function joinGroup() {
   error.value = ''
   if (!joinCode.value.trim()) return
   try {
-    const { data } = await api.post<GroupSummary>('/api/groups/join', { invite_code: joinCode.value })
+    const { data } = await api.post<GroupSummary & { new_badges?: BadgeInfo[] }>('/api/groups/join', { invite_code: joinCode.value })
+    await badgesStore.announce(data.new_badges)
     joinCode.value = ''
     await loadGroups()
     await openGroup(data.id)
