@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '../api'
 import { apiErrorMessage } from '../i18n/errors'
 import { formatDate, toIso } from '../i18n/dates'
 import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 import DateField from './DateField.vue'
+import JournalLock from './JournalLock.vue'
+import { useJournalLockStore } from '../stores/journalLock'
 
 // A private journal: write, and/or record your voice. Recordings are made with the browser's
 // MediaRecorder, stored on the server and only ever served back to their owner.
@@ -32,6 +34,7 @@ const PAGE = 10
 
 const { t } = useI18n()
 const badgesStore = useBadgesStore()
+const lock = useJournalLockStore()
 const today = toIso(new Date())
 
 const entries = ref<Entry[]>([])
@@ -217,7 +220,25 @@ function revoke(id: string) {
   audioUrls.value = rest
 }
 
-onMounted(() => load(true))
+onMounted(async () => {
+  try {
+    await lock.refresh()
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+    return
+  }
+  if (!lock.blocked) load(true)
+})
+// unlocking loads the entries; locking again wipes everything decrypted from memory
+watch(() => lock.blocked, (blocked) => {
+  if (blocked) {
+    entries.value = []
+    total.value = 0
+    Object.keys(audioUrls.value).forEach(revoke)
+  } else {
+    load(true)
+  }
+})
 onBeforeUnmount(() => {
   discardRecording()
   Object.values(audioUrls.value).forEach((u) => URL.revokeObjectURL(u))
@@ -229,6 +250,9 @@ onBeforeUnmount(() => {
     <p v-if="error" role="alert" class="text-danger text-sm">{{ error }}</p>
     <p v-if="message" role="status" class="text-ok text-sm font-medium">{{ message }}</p>
 
+    <JournalLock />
+
+    <template v-if="!lock.blocked">
     <section class="bg-surface rounded-xl shadow p-4 space-y-3 border-t-4 border-purple-500">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="font-bold text-slate-800">{{ t('journal.newEntry') }}</h3>
@@ -328,5 +352,6 @@ onBeforeUnmount(() => {
         {{ t('journal.loadMore') }}
       </button>
     </section>
+    </template>
   </div>
 </template>

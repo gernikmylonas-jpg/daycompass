@@ -31,6 +31,23 @@ const THEME_KEY = 'theme'
 const MODE_KEY = 'mode'
 const NEEDLE_KEY = 'needleCursor'
 const MOOD_KEY = 'moodStyle'
+const DEPTH_KEY = 'depth3d'
+const BRIGHT_KEY = 'brightness'
+const LID_KEY = 'lid'
+export interface CalendarLayers {
+  holidays: boolean // public holidays of `country`
+  country: string // ISO code, e.g. GR
+  nameDays: boolean // Greek Orthodox name days
+  history: boolean // moments from world history and fun facts
+  national: boolean // national days of all countries
+}
+const LAYERS_KEY = 'calendarLayers'
+const defaultCountry = () => {
+  const lang = (i18n.global.locale.value as string) || 'en'
+  return lang === 'el' ? 'GR' : lang === 'es' ? 'ES' : lang === 'fr' ? 'FR' : 'GB'
+}
+export const BRIGHTNESS_MIN = 50
+export const BRIGHTNESS_MAX = 150
 const DEFAULT_THEME: ThemeId = 'classic'
 const SAVE_DELAY_MS = 500
 
@@ -55,12 +72,33 @@ function write(key: string, value: string) {
   }
 }
 
+function parseLayers(raw: string | null | undefined): CalendarLayers {
+  const base: CalendarLayers = { holidays: false, country: defaultCountry(), nameDays: false, history: false, national: false }
+  if (!raw) return base
+  try {
+    const v = JSON.parse(raw)
+    return {
+      holidays: v.holidays === true,
+      country: typeof v.country === 'string' && /^[A-Za-z]{2}$/.test(v.country) ? v.country.toUpperCase() : base.country,
+      nameDays: v.nameDays === true,
+      history: v.history === true,
+      national: v.national === true,
+    }
+  } catch {
+    return base
+  }
+}
+
 interface ServerSettings {
   theme: string
   mode: string
   needle_cursor: boolean
   language: string | null
   mood_style?: string
+  depth_3d?: boolean
+  lid_open?: boolean
+  calendar_prefs?: string | null
+  brightness?: number
   saved: boolean
 }
 
@@ -77,6 +115,12 @@ export const useSettingsStore = defineStore('settings', () => {
   const storedMood = read(MOOD_KEY)
   const moodStyle = ref<MoodStyle>(isMoodStyle(storedMood) ? storedMood : 'emoji')
 
+  const calendarLayers = ref<CalendarLayers>(parseLayers(read(LAYERS_KEY)))
+  const depth3d = ref(read(DEPTH_KEY) === 'on')
+  const lidAnimation = ref(read(LID_KEY) === 'on')
+  const storedBright = Number(read(BRIGHT_KEY))
+  const brightness = ref(storedBright >= BRIGHTNESS_MIN && storedBright <= BRIGHTNESS_MAX ? storedBright : 100)
+
   const mq = window.matchMedia('(prefers-color-scheme: dark)')
   const systemDark = ref(mq.matches)
   mq.addEventListener('change', (e) => (systemDark.value = e.matches))
@@ -87,6 +131,8 @@ export const useSettingsStore = defineStore('settings', () => {
   function apply() {
     document.documentElement.dataset.theme = theme.value
     document.documentElement.dataset.mode = resolvedMode.value
+    document.documentElement.dataset.depth = depth3d.value ? '3d' : 'flat'
+    document.documentElement.style.setProperty('--lamp', String(brightness.value / 100))
   }
   apply() // before first paint, so there is no flash of the wrong theme
 
@@ -104,6 +150,10 @@ export const useSettingsStore = defineStore('settings', () => {
         needle_cursor: needleCursor.value,
         language: i18n.global.locale.value,
         mood_style: moodStyle.value,
+        depth_3d: depth3d.value,
+        lid_open: lidAnimation.value,
+        calendar_prefs: JSON.stringify(calendarLayers.value),
+        brightness: brightness.value,
       })
       syncError.value = false
     } catch {
@@ -130,6 +180,10 @@ export const useSettingsStore = defineStore('settings', () => {
       if (isMode(data.mode)) mode.value = data.mode
       needleCursor.value = data.needle_cursor
       if (isMoodStyle(data.mood_style)) moodStyle.value = data.mood_style
+      if (data.calendar_prefs) Object.assign(calendarLayers.value, parseLayers(data.calendar_prefs))
+      if (typeof data.lid_open === 'boolean') lidAnimation.value = data.lid_open
+      if (typeof data.depth_3d === 'boolean') depth3d.value = data.depth_3d
+      if (typeof data.brightness === 'number' && data.brightness >= BRIGHTNESS_MIN && data.brightness <= BRIGHTNESS_MAX) brightness.value = data.brightness
       if (isLocale(data.language)) setLocale(data.language)
       // let the watchers below run once while hydrating, so they do not echo it back
       await Promise.resolve()
@@ -161,6 +215,25 @@ export const useSettingsStore = defineStore('settings', () => {
     scheduleSave()
   })
 
+  watch(depth3d, (value) => {
+    apply()
+    write(DEPTH_KEY, value ? 'on' : 'off')
+    scheduleSave()
+  })
+  watch(calendarLayers, (value) => {
+    write(LAYERS_KEY, JSON.stringify(value))
+    scheduleSave()
+  }, { deep: true })
+  watch(lidAnimation, (value) => {
+    write(LID_KEY, value ? 'on' : 'off')
+    scheduleSave()
+  })
+  watch(brightness, (value) => {
+    apply()
+    write(BRIGHT_KEY, String(value))
+    scheduleSave()
+  })
+
   function setTheme(id: ThemeId) {
     theme.value = id
   }
@@ -173,5 +246,5 @@ export const useSettingsStore = defineStore('settings', () => {
     moodStyle.value = value
   }
 
-  return { theme, mode, resolvedMode, needleCursor, moodStyle, syncError, setTheme, setMode, setMoodStyle, loadFromServer }
+  return { theme, mode, resolvedMode, needleCursor, moodStyle, depth3d, brightness, lidAnimation, calendarLayers, syncError, setTheme, setMode, setMoodStyle, loadFromServer }
 })

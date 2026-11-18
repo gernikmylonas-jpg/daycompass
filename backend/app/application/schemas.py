@@ -39,6 +39,7 @@ class HabitCreate(BaseModel):
 class HabitUpdate(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
+    frequency: Optional[str] = None  # "daily" or "weekly:N"
 
 
 class HabitResponse(BaseModel):
@@ -47,8 +48,10 @@ class HabitResponse(BaseModel):
     frequency: str
     category: str
     checked_in_today: bool = False
-    current_streak: int = 0
+    current_streak: int = 0   # days for daily habits, weeks for weekly ones
     best_streak: int = 0
+    target_per_week: Optional[int] = None
+    week_count: int = 0       # check-ins so far this week (Monday-Sunday)
 
     class Config:
         from_attributes = True
@@ -211,6 +214,10 @@ class SettingsPayload(BaseModel):
     needle_cursor: bool
     language: Optional[str] = None
     mood_style: str = "emoji"
+    depth_3d: bool = False
+    calendar_prefs: Optional[str] = None  # JSON text, opaque to the server (max 2000 characters)
+    lid_open: bool = False  # play the compass lid animation on the home screen
+    brightness: int = 100  # lighting of the compass face, percent
 
 
 class SettingsResponse(SettingsPayload):
@@ -223,6 +230,7 @@ class EventCreate(BaseModel):
     kind: str = "note"
     notes: Optional[str] = None
     repeat_yearly: bool = False
+    repeat_weekly: bool = False
 
 
 class EventResponse(BaseModel):
@@ -231,6 +239,7 @@ class EventResponse(BaseModel):
     kind: str
     notes: Optional[str] = None
     repeat_yearly: bool
+    repeat_weekly: bool = False
     date: date           # the day this occurrence falls on
     original_date: date  # the day it was created for (birthdays repeat every year)
     new_badges: list[BadgeInfo] = []
@@ -350,3 +359,60 @@ class WellnessHistory(BaseModel):
     best_steps: int
     sleep_logged: int
     avg_sleep_minutes: int
+
+
+class ChallengeCreate(BaseModel):
+    title: str
+    metric: str
+    target: int
+    start_date: date
+    end_date: date
+
+
+class ChallengeMember(BaseModel):
+    user_id: UUID
+    name: str
+    progress: int
+    done: bool
+    is_me: bool
+
+
+class ChallengeResponse(BaseModel):
+    id: UUID
+    title: str
+    metric: str
+    target: int
+    start_date: date
+    end_date: date
+    status: str          # upcoming | active | finished
+    days_left: int
+    completed_count: int
+    members: list[ChallengeMember]  # most progress first
+
+
+class Correlation(BaseModel):
+    key: str            # sleep | meditation | steps | checkin
+    n_with: int
+    n_without: int
+    avg_with: float     # average mood on days with the habit
+    avg_without: float
+
+
+class ReportResponse(BaseModel):
+    period: str
+    start: date
+    end: date
+    axes: dict[str, Optional[float]]   # 0-100 per direction-like area, None = no data
+    checkins: int
+    active_days: int
+    days: int
+    points_earned: int
+    pomodoro_minutes: int
+    meditation_minutes: int
+    avg_steps: Optional[int] = None
+    avg_sleep_minutes: Optional[int] = None
+    avg_mood: Optional[float] = None
+    prev_avg_mood: Optional[float] = None
+    journal_entries: int
+    weekdays: list[int]                # check-ins by weekday, Monday first
+    correlations: list[Correlation]

@@ -178,3 +178,43 @@ def delete_sleep(log_date: date, user_id: str = Depends(get_current_user_id), db
     db.delete(log)
     db.commit()
     return {"detail": "Sleep entry deleted"}
+
+
+@router.get("/steps/series")
+def steps_series(
+    period: str = Query("week", pattern="^(week|month|year)$"),
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Steps for a chart: 7 days, 30 days, or 12 months (monthly average of the days logged),
+    plus today's total and how many days in a row the goal was reached."""
+    today = date.today()
+    by_day = {l.log_date: l.steps for l in db.query(StepLog).filter(StepLog.user_id == user_id)}
+
+    buckets = []
+    if period in ("week", "month"):
+        n = 7 if period == "week" else 30
+        for i in range(n - 1, -1, -1):
+            d = today - timedelta(days=i)
+            v = by_day.get(d)
+            buckets.append({"start": d, "steps": v, "days_logged": 0 if v is None else 1,
+                            "goal_days": 1 if v is not None and v >= STEP_GOAL else 0})
+    else:
+        y, m = today.year, today.month
+        months = []
+        for _ in range(12):
+            months.append((y, m))
+            m -= 1
+            if m == 0:
+                y, m = y - 1, 12
+        for (y, m) in reversed(months):
+            vals = [v for d, v in by_day.items() if d.year == y and d.month == m]
+            buckets.append({"start": date(y, m, 1), "steps": round(sum(vals) / len(vals)) if vals else None,
+                            "days_logged": len(vals), "goal_days": sum(1 for v in vals if v >= STEP_GOAL)})
+
+    streak = 0
+    day = today if by_day.get(today, 0) >= STEP_GOAL else today - timedelta(days=1)  # today may still be in progress
+    while by_day.get(day, 0) >= STEP_GOAL:
+        streak += 1
+        day -= timedelta(days=1)
+    return {"goal": STEP_GOAL, "period": period, "today": by_day.get(today), "goal_streak": streak, "buckets": buckets}

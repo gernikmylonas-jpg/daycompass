@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '../api'
 import { apiErrorMessage } from '../i18n/errors'
+import ChallengesSection from './ChallengesSection.vue'
 import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 
 interface GroupSummary {
@@ -137,6 +138,8 @@ function openSocket() {
   }
 }
 
+const challengesRef = ref<InstanceType<typeof ChallengesSection> | null>(null)
+
 async function refreshSelected() {
   const id = socketGroupId
   if (!id) return
@@ -144,6 +147,7 @@ async function refreshSelected() {
     const { data } = await api.get<GroupDetail>(`/api/groups/${id}`, { params: { period: period.value } })
     if (socketGroupId === id) selected.value = data
     loadGroups()
+    challengesRef.value?.reload()
   } catch {
     // transient failure; the next event or reconnect will refresh again
   }
@@ -330,6 +334,8 @@ onUnmounted(disconnectSocket)
           <span class="font-medium text-slate-800">{{ t('groups.points', { n: e.points }) }}</span>
         </li>
       </ol>
+
+      <ChallengesSection ref="challengesRef" :group-id="selected.id" :is-owner="selected.is_owner" />
 
       <div class="flex justify-end gap-2 pt-2">
         <button @click="leaveGroup" class="text-sm border border-slate-400 text-slate-600 rounded-lg px-3 py-1 hover:bg-slate-50">

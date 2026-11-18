@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from './stores/auth'
@@ -14,12 +14,18 @@ const settings = useSettingsStore()
 
 // Once signed in, the account's saved preferences (style, mode, cursor, language) replace this
 // device's; from then on every change is saved back to the account.
+const online = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
+const setOnline = () => { online.value = navigator.onLine }
+onMounted(() => { window.addEventListener('online', setOnline); window.addEventListener('offline', setOnline) })
+onBeforeUnmount(() => { window.removeEventListener('online', setOnline); window.removeEventListener('offline', setOnline) })
+
 watch(() => auth.token, (token) => { if (token) settings.loadFromServer() }, { immediate: true })
 </script>
 
 <template>
   <div class="bg-page min-h-screen">
     <a href="#main" class="skip-link">{{ t('a11y.skip') }}</a>
+    <p v-if="!online" role="status" class="bg-surface border-b border-slate-400 text-slate-700 text-sm text-center px-4 py-1">📡 {{ t('common.offline') }}</p>
     <div class="h-12 px-4 md:px-8 flex items-center justify-between">
       <!-- small compass emblem: the needle cursor points here on pages without the big dial -->
       <RouterLink to="/" aria-label="DayCompass" data-compass-target="logo"

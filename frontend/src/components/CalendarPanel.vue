@@ -27,9 +27,15 @@ interface CalEvent {
   kind: Kind
   notes: string | null
   repeat_yearly: boolean
+  repeat_weekly: boolean
   date: string
   original_date: string
 }
+
+import { useSettingsStore } from '../stores/settings'
+import { namesOn } from '../calendars/nameDays'
+import { historyOn, formatYear } from '../calendars/history'
+import { nationalDaysOn, flagOf } from '../calendars/nationalDays'
 
 const MIN_YEAR = 2000
 const MAX_YEAR = 2100
@@ -46,6 +52,8 @@ const dotColor: Record<Category, string> = {
 
 const { t, locale } = useI18n()
 const badgesStore = useBadgesStore()
+const settings = useSettingsStore()
+const layers = settings.calendarLayers
 const loc = computed(() => intlLocale(locale.value))
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -75,11 +83,12 @@ const month = ref(now.getMonth() + 1)
 const weekStart = ref(mondayOf(now))
 const entries = ref<CheckInEntry[]>([])
 const events = ref<CalEvent[]>([])
+const restDays = ref<string[]>([])
 const selected = ref<string | null>(todayIso)
 const error = ref('')
 
 // note form (add or edit)
-const form = ref<{ id: string | null; title: string; kind: Kind; notes: string; repeat: boolean; date: string } | null>(null)
+const form = ref<{ id: string | null; title: string; kind: Kind; notes: string; repeat: boolean; weekly: boolean; date: string } | null>(null)
 const busy = ref(false)
 
 const monthNames = computed(() => {
@@ -143,14 +152,90 @@ function currentRange(): [string, string] {
   return [iso(year.value, month.value, 1), iso(year.value, month.value, last)]
 }
 
+// ── extra calendars the user can switch on ──────────────────────────────
+const LAYER_DEFS = [
+  { key: 'holidays', icon: '🏛' },
+  { key: 'nameDays', icon: '✝' },
+  { key: 'national', icon: '🏳' },
+  { key: 'history', icon: '📜' },
+] as const
+
+const regionNames = computed(() => new Intl.DisplayNames([loc.value], { type: 'region' }))
+const countryCodes = ref<string[]>([])
+const countryOptions = computed(() =>
+  countryCodes.value
+    .map((cc) => ({ cc, name: regionNames.value.of(cc) ?? cc }))
+    .sort((a, b) => a.name.localeCompare(b.name, loc.value)),
+)
+const countryName = (cc: string) => { try { return regionNames.value.of(cc) ?? cc } catch { return cc } }
+
+const holidayCache = ref<Record<string, { date: string; name: string }[]>>({})
+async function loadHolidays() {
+  if (!layers.holidays) return
+  if (!countryCodes.value.length) {
+    try { countryCodes.value = (await api.get<string[]>('/api/calendars/countries')).data } catch (e) { error.value = apiErrorMessage(e); return }
+  }
+  const [start, end] = currentRange()
+  const years = new Set([Number(start.slice(0, 4)), Number(end.slice(0, 4))])
+  for (const y of years) {
+    const k = `${layers.country}-${y}-${locale.value}`
+    if (holidayCache.value[k]) continue
+    try {
+      holidayCache.value[k] = (await api.get('/api/calendars/holidays', { params: { country: layers.country, year: y, lang: locale.value } })).data
+    } catch (e) {
+      error.value = apiErrorMessage(e)
+    }
+  }
+}
+const holidaysByDate = computed(() => {
+  const map = new Map<string, string[]>()
+  for (const [k, list] of Object.entries(holidayCache.value)) {
+    if (!k.startsWith(`${layers.country}-`) || !k.endsWith(`-${locale.value}`)) continue
+    for (const h of list) map.set(h.date, [...(map.get(h.date) ?? []), h.name])
+  }
+  return map
+})
+
+const nameDaysFor = (d: string) => (layers.nameDays ? namesOn(parse(d)) : [])
+const historyFor = (d: string) => (layers.history ? historyOn(Number(d.slice(5, 7)), Number(d.slice(8, 10))) : [])
+const nationalFor = (d: string) => (layers.national ? nationalDaysOn(Number(d.slice(5, 7)), Number(d.slice(8, 10))) : [])
+const holidaysFor = (d: string) => (layers.holidays ? holidaysByDate.value.get(d) ?? [] : [])
+const historyText = (h: { en: string; el: string }) => (locale.value === 'el' ? h.el : h.en)
+// small glyphs under a day's number: which of the switched-on calendars have something that day
+const dayGlyphs = (d: string) => [
+  holidaysFor(d).length ? '🏛' : '',
+  nameDaysFor(d).length ? '✝' : '',
+  nationalFor(d).length ? '🏳' : '',
+  historyFor(d).length ? '📜' : '',
+].filter(Boolean).join('')
+
+watch(() => [layers.holidays, layers.country, locale.value], loadHolidays)
+
+const isRest = (d: string) => restDays.value.includes(d)
+// a rest day can be set from a week back to three days ahead (the server enforces it too)
+const canRest = (d: string) => d >= addDays(todayIso, -7) && d <= addDays(todayIso, 3)
+async function toggleRest(d: string) {
+  error.value = ''
+  try {
+    if (isRest(d)) await api.delete(`/api/rest-days/${d}`)
+    else await api.put(`/api/rest-days/${d}`)
+    await load()
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  }
+}
+
 async function load() {
   error.value = ''
   const [start, end] = currentRange()
   try {
-    const [checkIns, notes] = await Promise.all([
+    const [checkIns, notes, rest] = await Promise.all([
       api.get<CheckInEntry[]>('/api/stats/calendar-range', { params: { start, end } }),
       api.get<CalEvent[]>('/api/calendar/events', { params: { start, end } }),
+      api.get<string[]>('/api/rest-days', { params: { start, end } }),
     ])
+    restDays.value = rest.data
+    loadHolidays()
     entries.value = checkIns.data
     events.value = notes.data
   } catch (e) {
@@ -219,11 +304,11 @@ function uniqueCategories(list: CheckInEntry[]) {
 // ── notes ────────────────────────────────────────────────────────────────
 function startNew() {
   if (!selected.value) return
-  form.value = { id: null, title: '', kind: 'note', notes: '', repeat: false, date: selected.value }
+  form.value = { id: null, title: '', kind: 'note', notes: '', repeat: false, weekly: false, date: selected.value }
 }
 
 function startEdit(ev: CalEvent) {
-  form.value = { id: ev.id, title: ev.title, kind: ev.kind, notes: ev.notes ?? '', repeat: ev.repeat_yearly, date: ev.original_date }
+  form.value = { id: ev.id, title: ev.title, kind: ev.kind, notes: ev.notes ?? '', repeat: ev.repeat_yearly, weekly: ev.repeat_weekly, date: ev.original_date }
 }
 
 // a birthday repeats every year by default
@@ -237,7 +322,7 @@ async function save() {
   busy.value = true
   error.value = ''
   try {
-    const payload = { title: f.title, event_date: f.date, kind: f.kind, notes: f.notes || null, repeat_yearly: f.repeat }
+    const payload = { title: f.title, event_date: f.date, kind: f.kind, notes: f.notes || null, repeat_yearly: f.repeat, repeat_weekly: f.weekly }
     if (f.id) await api.put(`/api/calendar/events/${f.id}`, payload)
     else {
       const { data } = await api.post<{ new_badges?: BadgeInfo[] }>('/api/calendar/events', payload)
@@ -294,7 +379,7 @@ async function addFromMenu(kind: Kind) {
   closeMenu()
   if (!date) return
   selected.value = date
-  form.value = { id: null, title: '', kind, notes: '', repeat: kind === 'birthday', date }
+  form.value = { id: null, title: '', kind, notes: '', repeat: kind === 'birthday', weekly: false, date }
   await nextTick()
   titleInput.value?.focus()
 }
@@ -378,6 +463,19 @@ onBeforeUnmount(() => {
           class="px-3 py-1 rounded-lg hover:bg-slate-100 text-slate-600 disabled:opacity-30">›</button>
       </div>
 
+      <div class="flex flex-wrap items-center gap-2 mb-3" role="group" :aria-label="t('calendar.layers.title')">
+        <span class="text-xs text-slate-500">{{ t('calendar.layers.title') }}:</span>
+        <button v-for="l in LAYER_DEFS" :key="l.key" type="button" :aria-pressed="layers[l.key]" @click="layers[l.key] = !layers[l.key]"
+          :class="['rounded-full border px-3 py-1 text-xs flex items-center gap-1',
+            layers[l.key] ? 'border-slate-700 bg-slate-100 font-semibold text-slate-900' : 'border-slate-300 text-slate-600 hover:bg-slate-50']">
+          <span aria-hidden="true">{{ l.icon }}</span>{{ t(`calendar.layers.${l.key}`) }}
+        </button>
+        <select v-if="layers.holidays" v-model="layers.country" :aria-label="t('calendar.layers.country')" class="border rounded-lg px-2 py-1 text-xs max-w-44">
+          <option v-if="!countryOptions.length" :value="layers.country">{{ countryName(layers.country) }}</option>
+          <option v-for="o in countryOptions" :key="o.cc" :value="o.cc">{{ flagOf(o.cc) }} {{ o.name }}</option>
+        </select>
+      </div>
+
       <template v-if="view === 'month'">
         <div class="grid grid-cols-7 gap-1 text-center text-xs text-slate-500 mb-1">
           <div v-for="w in WEEKDAYS" :key="w">{{ w }}</div>
@@ -391,6 +489,8 @@ onBeforeUnmount(() => {
                 selected === c.date ? 'border-slate-800 bg-slate-50' : 'border-transparent hover:bg-slate-50',
                 c.date === todayIso ? 'font-bold text-teal-700' : 'text-slate-700']">
               <span>{{ c.day }}</span>
+              <span v-if="isRest(c.date)" class="text-[0.7rem] leading-none" aria-hidden="true">🛌</span>
+              <span v-if="dayGlyphs(c.date)" class="text-[0.6rem] leading-none text-slate-500" aria-hidden="true">{{ dayGlyphs(c.date) }}</span>
               <span v-if="byDateEvents.get(c.date)?.length" class="text-[0.7rem] leading-none mt-0.5" aria-hidden="true">
                 {{ KIND_ICON[byDateEvents.get(c.date)![0].kind] }}<span v-if="byDateEvents.get(c.date)!.length > 1" class="text-slate-500">+{{ byDateEvents.get(c.date)!.length - 1 }}</span>
               </span>
@@ -408,7 +508,7 @@ onBeforeUnmount(() => {
           :aria-label="fullDate(d.date)"
           :class="['text-left rounded-lg border p-2 min-h-24',
             selected === d.date ? 'border-slate-800' : d.date === todayIso ? 'border-teal-500 bg-teal-50' : 'border-slate-200']">
-          <p :class="['text-xs mb-1', d.date === todayIso ? 'font-bold text-teal-700' : 'text-slate-500']">{{ d.label }} {{ d.day }}</p>
+          <p :class="['text-xs mb-1', d.date === todayIso ? 'font-bold text-teal-700' : 'text-slate-500']">{{ d.label }} {{ d.day }} <span v-if="isRest(d.date)" aria-hidden="true">🛌</span> <span class="text-[0.6rem]" aria-hidden="true">{{ dayGlyphs(d.date) }}</span></p>
           <ul class="space-y-0.5">
             <li v-for="ev in byDateEvents.get(d.date) ?? []" :key="ev.id + d.date" class="text-xs text-slate-700 break-words">
               <span aria-hidden="true">{{ KIND_ICON[ev.kind] }}</span> {{ ev.title }}
@@ -436,15 +536,49 @@ onBeforeUnmount(() => {
       </div>
     </Teleport>
 
+    <!-- what the switched-on calendars say about the chosen day -->
+    <section v-if="selected && (holidaysFor(selected).length || nameDaysFor(selected).length || nationalFor(selected).length || historyFor(selected).length)"
+      class="bg-surface rounded-xl shadow p-4 space-y-3 border-t-4 border-sky-500">
+      <div v-if="holidaysFor(selected).length">
+        <h4 class="text-sm font-bold text-slate-800">🏛 {{ t('calendar.layers.holidays') }} · {{ countryName(layers.country) }}</h4>
+        <ul class="text-sm text-slate-700 list-disc pl-5"><li v-for="h in holidaysFor(selected)" :key="h">{{ h }}</li></ul>
+      </div>
+      <div v-if="nameDaysFor(selected).length">
+        <h4 class="text-sm font-bold text-slate-800">✝ {{ t('calendar.layers.nameDays') }}</h4>
+        <p class="text-sm text-slate-700">{{ nameDaysFor(selected).join(', ') }}</p>
+      </div>
+      <div v-if="nationalFor(selected).length">
+        <h4 class="text-sm font-bold text-slate-800">🏳 {{ t('calendar.layers.national') }}</h4>
+        <p class="text-sm text-slate-700">{{ nationalFor(selected).map((cc) => `${flagOf(cc)} ${countryName(cc)}`).join(' · ') }}</p>
+      </div>
+      <div v-if="historyFor(selected).length">
+        <h4 class="text-sm font-bold text-slate-800">📜 {{ t('calendar.layers.history') }}</h4>
+        <ul class="text-sm text-slate-700 space-y-1">
+          <li v-for="(h, i) in historyFor(selected)" :key="i">
+            <b v-if="h.year" class="tabular-nums">{{ formatYear(h.year) }}</b>
+            <span class="text-xs text-slate-500"> {{ h.kind === 'fact' ? '· ' + t('calendar.layers.funFact') : '' }}</span>
+            — {{ historyText(h) }}
+          </li>
+        </ul>
+      </div>
+    </section>
+
     <!-- the chosen day: habits done, notes, and the note form -->
     <section v-if="selected" class="bg-surface rounded-xl shadow p-4 space-y-3" aria-live="polite">
       <div class="flex items-start justify-between gap-2">
         <h3 class="font-bold text-slate-800">{{ fullDate(selected) }}</h3>
-        <button v-if="!form" @click="startNew"
-          class="bg-primary text-on-primary rounded-lg px-3 py-1 text-sm hover:bg-primary-hover shrink-0">
-          + {{ t('calendar.addNote') }}
-        </button>
+        <div class="flex flex-wrap justify-end gap-2">
+          <button v-if="canRest(selected)" @click="toggleRest(selected)" :aria-pressed="isRest(selected)"
+            class="border border-slate-400 text-slate-700 rounded-lg px-3 py-1 text-sm hover:bg-slate-50 shrink-0">
+            🛌 {{ isRest(selected) ? t('calendar.clearRest') : t('calendar.markRest') }}
+          </button>
+          <button v-if="!form" @click="startNew"
+            class="bg-primary text-on-primary rounded-lg px-3 py-1 text-sm hover:bg-primary-hover shrink-0">
+            + {{ t('calendar.addNote') }}
+          </button>
+        </div>
       </div>
+      <p v-if="isRest(selected)" class="text-xs text-slate-500">{{ t('calendar.restHint') }}</p>
 
       <ul v-if="selectedEvents.length" class="space-y-2">
         <li v-for="ev in selectedEvents" :key="ev.id" class="flex items-start gap-2 text-sm text-slate-700">
@@ -453,6 +587,7 @@ onBeforeUnmount(() => {
             <p class="font-medium break-words">
               {{ ev.title }}
               <span v-if="ev.repeat_yearly" class="text-xs font-normal text-slate-500">· {{ t('calendar.yearly') }}</span>
+              <span v-if="ev.repeat_weekly" class="text-xs font-normal text-slate-500">· {{ t('calendar.weekly') }}</span>
             </p>
             <p v-if="ev.notes" class="text-xs text-slate-500 break-words whitespace-pre-line">{{ ev.notes }}</p>
           </div>
@@ -491,10 +626,16 @@ onBeforeUnmount(() => {
         <textarea v-model="form.notes" rows="2" maxlength="500"
           :placeholder="t('calendar.details')" :aria-label="t('calendar.details')"
           class="w-full border rounded-lg px-3 py-2 text-sm"></textarea>
-        <label class="flex items-center gap-2 text-sm text-slate-700">
-          <input v-model="form.repeat" type="checkbox" class="h-4 w-4" />
-          {{ t('calendar.repeatYearly') }}
-        </label>
+        <div class="flex flex-wrap gap-x-5 gap-y-1">
+          <label class="flex items-center gap-2 text-sm text-slate-700">
+            <input v-model="form.repeat" type="checkbox" class="h-4 w-4" @change="form!.weekly = false" />
+            {{ t('calendar.repeatYearly') }}
+          </label>
+          <label class="flex items-center gap-2 text-sm text-slate-700">
+            <input v-model="form.weekly" type="checkbox" class="h-4 w-4" @change="form!.repeat = false" />
+            {{ t('calendar.repeatWeekly') }}
+          </label>
+        </div>
         <div class="flex gap-2">
           <button type="submit" :disabled="busy"
             class="bg-primary text-on-primary rounded-lg px-4 py-1.5 text-sm hover:bg-primary-hover disabled:opacity-50">

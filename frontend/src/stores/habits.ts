@@ -13,6 +13,8 @@ export interface Habit {
   checked_in_today: boolean
   current_streak: number
   best_streak: number
+  target_per_week: number | null
+  week_count: number
 }
 
 export interface HeatmapDay {
@@ -36,16 +38,16 @@ export const useHabitsStore = defineStore('habits', () => {
     heatmap.value = data
   }
 
-  async function addHabit(name: string, category: Category) {
+  async function addHabit(name: string, category: Category, frequency = 'daily') {
     const { data } = await api.post<Habit>('/api/habits', {
       name,
-      frequency: 'daily',
+      frequency,
       category,
     })
     habits.value.push(data)
   }
 
-  async function updateHabit(habit: Habit, changes: { name?: string; category?: Category }) {
+  async function updateHabit(habit: Habit, changes: { name?: string; category?: Category; frequency?: string }) {
     const { data } = await api.put<Habit>(`/api/habits/${habit.id}`, changes)
     const index = habits.value.findIndex((h) => h.id === habit.id)
     if (index !== -1) habits.value[index] = data

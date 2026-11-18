@@ -570,3 +570,141 @@ html.needle-cursor select {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Compass materials, lighting and the optional 3D look ────────────────────
+   Every style has its own metal / leather / glass: the bezel, a pattern engraved on the face and the
+   lid colours are variables set per theme. --lamp (0.5–1.5) is the brightness setting;
+   data-depth="3d" adds depth, glass glare and a slight tilt towards the pointer. */
+html {
+  --bezel-bg: conic-gradient(from 210deg, #f6f1e4, #8a7a55 14%, #e9dfc2 28%, #5e5238 44%, #cdbf97 58%, #8a7a55 72%, #6a5c3e 86%, #f6f1e4 100%);
+  --bezel-glow: 0 0 0 transparent;
+  --face-pattern: none;
+  --lid-face: radial-gradient(circle at 35% 28%, #f1e3b4, #b99a52 55%, #7a6232 100%);
+  --lid-ink: #4a3a16;
+}
+html[data-theme="modern"] {
+  --bezel-bg: conic-gradient(from 210deg, #f8fafc, #94a3b8 14%, #e2e8f0 28%, #64748b 44%, #cbd5e1 58%, #94a3b8 72%, #475569 86%, #f8fafc 100%);
+  --face-pattern: repeating-conic-gradient(rgb(15 23 42 / 0.025) 0 1deg, transparent 1deg 3deg);
+  --lid-face: radial-gradient(circle at 35% 28%, #f8fafc, #cbd5e1 55%, #64748b 100%);
+  --lid-ink: #1e293b;
+}
+html[data-theme="retro"] {
+  --bezel-bg: conic-gradient(from 210deg, #f3bd8a, #a0522d 14%, #dc9157 28%, #6b3410 44%, #c9783a 58%, #8c4a1c 72%, #5a2b0d 86%, #f3bd8a 100%);
+  --face-pattern: repeating-radial-gradient(circle at 50% 50%, transparent 0 6px, rgb(120 70 20 / 0.07) 6px 7px);
+  --lid-face: radial-gradient(circle at 35% 28%, #e9a66b, #a8581f 55%, #5a2b0d 100%);
+  --lid-ink: #3b1d08;
+}
+html[data-theme="nautical"] {
+  --bezel-bg: conic-gradient(from 210deg, #fff3b0, #c9a227 14%, #fff0a0 28%, #8a6d12 44%, #e8c84a 58%, #a8841a 72%, #6e540c 86%, #fff3b0 100%);
+  --face-pattern: repeating-radial-gradient(ellipse at 50% 120%, transparent 0 9px, rgb(255 255 255 / 0.05) 9px 10px);
+  --lid-face: radial-gradient(circle at 35% 28%, #1f4577, #10294a 55%, #07142a 100%);
+  --lid-ink: #e8c84a;
+}
+html[data-theme="explorer"] {
+  --bezel-bg: conic-gradient(from 210deg, #8b5a2f, #4a2c14 20%, #9a6a3a 40%, #3a210f 60%, #5a381c 80%, #8b5a2f 100%);
+  --face-pattern: repeating-linear-gradient(45deg, rgb(90 58 30 / 0.06) 0 2px, transparent 2px 7px), repeating-linear-gradient(-45deg, rgb(90 58 30 / 0.06) 0 2px, transparent 2px 7px);
+  --lid-face: radial-gradient(circle at 35% 28%, #a8794a, #6e4524 60%, #3f2511 100%);
+  --lid-ink: #f1dfb8;
+}
+html[data-theme="neon"] {
+  --bezel-bg: conic-gradient(from 210deg, #00e5ff, #7c3aed 25%, #ff2e93 50%, #7c3aed 75%, #00e5ff 100%);
+  --bezel-glow: 0 0 14px rgb(0 229 255 / 0.55), 0 0 34px rgb(255 46 147 / 0.35);
+  --face-pattern: linear-gradient(rgb(0 229 255 / 0.09) 1px, transparent 1px) 0 0 / 16px 16px, linear-gradient(90deg, rgb(0 229 255 / 0.09) 1px, transparent 1px) 0 0 / 16px 16px;
+  --lid-face: radial-gradient(circle at 35% 28%, #1c1c3a, #0c0c1c 60%, #05050c 100%);
+  --lid-ink: #00e5ff;
+}
+html[data-theme="minimal"] {
+  --bezel-bg: #18181b;
+  --lid-face: #fafafa;
+  --lid-ink: #18181b;
+}
+
+[data-compass-target="main"] {
+  filter: brightness(var(--lamp, 1));
+}
+.dial-bezel {
+  display: block;
+  position: absolute;
+  inset: -2%;
+  border-radius: 9999px;
+  background: var(--bezel-bg);
+  box-shadow: var(--bezel-glow);
+}
+html[data-theme="explorer"] .dial-bezel::after {
+  content: "";
+  position: absolute;
+  border-radius: 9999px;
+  inset: 0.9%;
+  border: 2px dashed rgb(241 223 184 / 0.75); /* stitching */
+}
+.dial-body {
+  background-image: var(--face-pattern);
+}
+.dial-glass { display: none; }
+
+html[data-depth="3d"] [data-compass-target="main"] {
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  transform: perspective(1100px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+  transition: transform 0.18s ease-out;
+  transform-style: preserve-3d;
+  filter: brightness(var(--lamp, 1)) drop-shadow(0 28px 22px rgb(0 0 0 / 0.35));
+}
+html[data-depth="3d"] .dial-bezel {
+  inset: -3.2%;
+  box-shadow: inset 0 2px 3px rgb(255 255 255 / 0.55), inset 0 -3px 6px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.35), var(--bezel-glow);
+}
+html[data-depth="3d"] .dial-body {
+  /* the face is a shallow dish: dark rim, lighter centre, light from the top left */
+  background-image:
+    radial-gradient(circle at 36% 30%, rgb(255 255 255 / 0.16), transparent 55%),
+    radial-gradient(circle at 50% 50%, transparent 62%, rgb(0 0 0 / 0.28) 100%),
+    var(--face-pattern);
+  box-shadow: inset 0 6px 14px rgb(0 0 0 / 0.35), inset 0 -3px 8px rgb(255 255 255 / 0.12);
+}
+html[data-depth="3d"] .dial-face {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.35));
+}
+html[data-depth="3d"] .dial-glass {
+  display: block;
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 5;
+  background:
+    radial-gradient(circle at var(--glare-x, 32%) var(--glare-y, 24%), rgb(255 255 255 / calc(0.32 * var(--lamp, 1))), transparent 38%),
+    linear-gradient(155deg, rgb(255 255 255 / 0.18), transparent 42%, rgb(0 0 0 / 0.12) 100%);
+}
+html[data-depth="3d"] [data-compass-target="main"] a,
+html[data-depth="3d"] [data-compass-target="main"] button {
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.4));
+}
+
+/* ── The lid: closed over the compass, it flips up like a pocket compass ── */
+.compass-lid {
+  position: absolute;
+  inset: -3.4%;
+  z-index: 30;
+  border-radius: 9999px;
+  transform-origin: 50% 0;
+  background: var(--lid-face);
+  color: var(--lid-ink);
+  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.18), inset 0 -10px 24px rgb(0 0 0 / 0.35), 0 10px 30px rgb(0 0 0 / 0.45), var(--bezel-glow);
+  cursor: pointer;
+  backface-visibility: hidden;
+}
+.compass-lid.opening {
+  animation: lid-open 1.15s cubic-bezier(0.55, 0.05, 0.25, 1) forwards;
+  pointer-events: none;
+}
+@keyframes lid-open {
+  0% { transform: perspective(1300px) rotateX(0deg); opacity: 1; }
+  70% { transform: perspective(1300px) rotateX(-88deg); opacity: 1; }
+  100% { transform: perspective(1300px) rotateX(-112deg) translateY(-6%); opacity: 0; }
+}
+html[data-theme="neon"] .compass-lid svg { filter: drop-shadow(0 0 4px currentColor); }
+
+@media (prefers-reduced-motion: reduce) {
+  .compass-lid { display: none; }
+}

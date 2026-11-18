@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     reminder_minute: int = 0
     maintenance_hour: int = 3    # nightly recalculation time (server local time)
     maintenance_minute: int = 30
+    events_hour: int = 8         # daily calendar-notes e-mail
+    events_minute: int = 0
 
     # Email reminders. Without smtp_host the message is only written to the log.
     smtp_host: str = ""

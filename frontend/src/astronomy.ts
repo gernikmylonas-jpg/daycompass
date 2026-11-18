@@ -383,3 +383,100 @@ export const METEOR_SHOWERS: MeteorShower[] = [
   { key: 'geminids', month: 12, day: 14, zhr: 150 },
   { key: 'ursids', month: 12, day: 22, zhr: 10 },
 ]
+
+// ── the Sun and the Moon as seen from a place (low-precision formulas, Meeus ch. 25) ────────────
+
+export interface Place {
+  lat: number // degrees north
+  lon: number // degrees east
+}
+
+const normDeg = (d: number) => ((d % 360) + 360) % 360
+const unixToJd = (ms: number) => ms / MS_PER_DAY + UNIX_JD
+
+/** The Sun's right ascension and declination (degrees) at an instant. */
+export function sunCoordinates(ms: number): { ra: number; dec: number } {
+  const T = (unixToJd(ms) - 2451545) / 36525
+  const L0 = 280.46646 + 36000.76983 * T + 0.0003032 * T ** 2
+  const M = 357.52911 + 35999.05029 * T - 0.0001537 * T ** 2
+  const C =
+    (1.914602 - 0.004817 * T - 0.000014 * T ** 2) * sinD(M) +
+    (0.019993 - 0.000101 * T) * sinD(2 * M) +
+    0.000289 * sinD(3 * M)
+  const omega = 125.04 - 1934.136 * T
+  const lambda = L0 + C - 0.00569 - 0.00478 * sinD(omega)
+  const eps = 23.439291 - 0.0130042 * T + 0.00256 * cosD(omega)
+  const ra = normDeg((Math.atan2(cosD(eps) * sinD(lambda), cosD(lambda)) * 180) / Math.PI)
+  const dec = (Math.asin(sinD(eps) * sinD(lambda)) * 180) / Math.PI
+  return { ra, dec }
+}
+
+function altitude(ra: number, dec: number, ms: number, place: Place): number {
+  const jd = unixToJd(ms)
+  const T = (jd - 2451545) / 36525
+  const gmst = 280.46061837 + 360.98564736629 * (jd - 2451545) + 0.000387933 * T ** 2
+  const hourAngle = normDeg(gmst + place.lon - ra)
+  const sinAlt = sinD(place.lat) * sinD(dec) + cosD(place.lat) * cosD(dec) * cosD(hourAngle)
+  return (Math.asin(Math.max(-1, Math.min(1, sinAlt))) * 180) / Math.PI
+}
+
+export const sunAltitude = (ms: number, place: Place) => {
+  const { ra, dec } = sunCoordinates(ms)
+  return altitude(ra, dec, ms, place)
+}
+
+/**
+ * The Moon's altitude at the middle of a lunar eclipse. A lunar eclipse happens at full moon,
+ * when the Moon is (within a degree or two) exactly opposite the Sun, so its position is the
+ * Sun's antipode: right ascension + 180°, declination negated.
+ */
+export function moonAltitudeAtLunarEclipse(ms: number, place: Place): number {
+  const { ra, dec } = sunCoordinates(ms)
+  return altitude(normDeg(ra + 180), -dec, ms, place)
+}
+
+export interface SunTimes {
+  sunrise: Date | null
+  sunset: Date | null
+  dayLengthMinutes: number
+  polar: 'day' | 'night' | null // the Sun never sets / never rises during these 24 hours
+}
+
+/** Sunrise and sunset in the 24 hours from `startMs` (use the local midnight of the day you want). */
+export function sunTimes(startMs: number, place: Place): SunTimes {
+  const HORIZON = -0.833 // the Sun's upper edge on the horizon, with refraction
+  const STEP = 10 * 60_000
+  const f = (ms: number) => sunAltitude(ms, place) - HORIZON
+
+  let sunrise: number | null = null
+  let sunset: number | null = null
+  let prev = f(startMs)
+  const startPositive = prev > 0
+  for (let t = startMs + STEP; t <= startMs + MS_PER_DAY; t += STEP) {
+    const cur = f(t)
+    if ((prev < 0) !== (cur < 0)) {
+      let lo = t - STEP
+      let hi = t
+      for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2
+        if ((f(mid) < 0) === (f(lo) < 0)) lo = mid
+        else hi = mid
+      }
+      if (cur > 0 && sunrise === null) sunrise = hi
+      else if (cur < 0 && sunset === null) sunset = hi
+    }
+    prev = cur
+  }
+  const polar = sunrise === null && sunset === null ? (startPositive ? 'day' : 'night') : null
+  let length = 0
+  if (polar === 'day') length = 24 * 60
+  else if (sunrise !== null && sunset !== null) length = sunset >= sunrise ? (sunset - sunrise) / 60_000 : (sunset - sunrise + MS_PER_DAY) / 60_000
+  else if (sunrise !== null) length = (startMs + MS_PER_DAY - sunrise) / 60_000
+  else if (sunset !== null) length = (sunset - startMs) / 60_000
+  return {
+    sunrise: sunrise === null ? null : new Date(sunrise),
+    sunset: sunset === null ? null : new Date(sunset),
+    dayLengthMinutes: Math.round(length),
+    polar,
+  }
+}

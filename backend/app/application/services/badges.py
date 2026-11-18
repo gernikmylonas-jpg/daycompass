@@ -1,13 +1,16 @@
 from collections import Counter, defaultdict
 from datetime import date
+from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.domain.models import (
     Badge, UserBadge, User, Habit, CheckIn, PomodoroSession, StepLog, SleepLog, JournalEntry, JournalAudio,
-    MoodLog, MeditationSession, CalendarEvent, Group, GroupMember,
+    MoodLog, MeditationSession, CalendarEvent, Group, GroupMember, RestDay, Challenge, WeightLog,
 )
+from app.application.services.points import STEP_GOAL
 from app.application.services.streaks import compute_streaks
 from app.application.services.leaderboard import group_leaderboard
+from app.application.services.challenges import member_progress
 
 # (code, name, description, fallback emoji). The app shows translated names/texts and its own
 # artwork for every code; the strings here are only the fallback. The first eight keep their
@@ -81,6 +84,13 @@ _NEW = [
     ("notes_first", "Planner", "Write your first calendar note", "🗓️"),
     ("notes_10", "Organizer", "Write 10 calendar notes", "📌"),
     ("birthday_first", "Never Forget", "Add a birthday to the calendar", "🎂"),
+    # north-west: challenges
+    ("challenge_first", "Challenger", "Reach the target of a group challenge", "🏁"),
+    ("challenge_5", "Serial Challenger", "Reach the target of 5 group challenges", "🥇"),
+    # north: steps streak and weight tracking
+    ("steps_streak_7", "Unstoppable", "Reach your step goal 7 days in a row", "🔥"),
+    ("weight_first", "On the Scale", "Log your weight for the first time", "⚖️"),
+    ("weight_30", "Steady Tracker", "Log your weight on 30 different days", "📈"),
 ]
 CATALOG += [{"code": c, "name": n, "description": d, "icon": i} for c, n, d, i in _NEW]
 
@@ -95,6 +105,22 @@ def seed_badges(db: Session) -> None:
 
 def _count(db: Session, column, *filters) -> int:
     return db.query(func.count(column)).filter(*filters).scalar() or 0
+
+
+def _challenges_done(db: Session, user_id: str) -> int:
+    done = 0
+    uid = UUID(str(user_id))  # progress is keyed by the UUIDs the database returns, not by the token's string
+    group_ids = [g for (g,) in db.query(GroupMember.group_id).filter(GroupMember.user_id == uid)]
+    for c in db.query(Challenge).filter(Challenge.group_id.in_(group_ids)) if group_ids else []:
+        if member_progress(db, c.metric, [uid], c.start_date, c.end_date).get(uid, 0) >= c.target:
+            done += 1
+    return done
+
+
+def _best_goal_run(db: Session, user_id: str) -> int:
+    """Longest run of consecutive days on which the step goal was reached."""
+    days = {d for (d,) in db.query(StepLog.log_date).filter(StepLog.user_id == user_id, StepLog.steps >= STEP_GOAL)}
+    return compute_streaks(days, date.today())[1]
 
 
 def _stats(db: Session, user_id: str) -> dict:
@@ -115,7 +141,8 @@ def _stats(db: Session, user_id: str) -> dict:
 
     habits_total = _count(db, Habit.id, Habit.user_id == user_id)
     best_habit_streak = max((compute_streaks(d, today)[1] for d in by_habit.values()), default=0)
-    best_daily_streak = compute_streaks(per_day.keys(), today)[1]
+    rest = {d for (d,) in db.query(RestDay.rest_date).filter(RestDay.user_id == user_id)}
+    best_daily_streak = compute_streaks(per_day.keys(), today, rest)[1]
 
     steps_max = db.query(func.max(StepLog.steps)).filter(StepLog.user_id == user_id).scalar() or 0
     user = db.query(User).filter(User.id == user_id).first()
@@ -128,6 +155,7 @@ def _stats(db: Session, user_id: str) -> dict:
             break
 
     return {
+        "challenges_done": _challenges_done(db, user_id),
         "checkins": len(rows),
         "best_streak": best_habit_streak,
         "daily_best": best_daily_streak,
@@ -140,6 +168,8 @@ def _stats(db: Session, user_id: str) -> dict:
         "pomodoros": _count(db, PomodoroSession.id, PomodoroSession.user_id == user_id),
         "focus_minutes": db.query(func.coalesce(func.sum(PomodoroSession.duration_minutes), 0))
         .filter(PomodoroSession.user_id == user_id).scalar() or 0,
+        "steps_goal_run": _best_goal_run(db, user_id),
+        "weight_days": _count(db, WeightLog.id, WeightLog.user_id == user_id),
         "steps_days": _count(db, StepLog.id, StepLog.user_id == user_id, StepLog.points_awarded > 0),
         "steps_max": steps_max,
         "sleep_days": _count(db, SleepLog.id, SleepLog.user_id == user_id, SleepLog.points_awarded > 0),
@@ -230,6 +260,11 @@ RULES = {
     "notes_first": _at_least("events", 1),
     "notes_10": _at_least("events", 10),
     "birthday_first": _at_least("birthdays", 1),
+    "challenge_first": _at_least("challenges_done", 1),
+    "challenge_5": _at_least("challenges_done", 5),
+    "steps_streak_7": _at_least("steps_goal_run", 7),
+    "weight_first": _at_least("weight_days", 1),
+    "weight_30": _at_least("weight_days", 30),
 }
 
 

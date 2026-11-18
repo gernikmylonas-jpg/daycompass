@@ -17,6 +17,7 @@ email-validator==2.3.0
 fastapi==0.141.1
 greenlet==3.5.5
 h11==0.16.0
+holidays==0.109
 httptools==0.8.0
 idna==3.19
 kombu==5.7.0

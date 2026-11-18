@@ -74,6 +74,37 @@ async function savePassword() {
   }
 }
 
+// ── your data: download everything, or delete the account for good ──
+const deletePassword = ref('')
+const confirmDelete = ref(false)
+
+async function exportData() {
+  reset('password')
+  try {
+    const { data } = await api.get<Blob>('/api/account/export', { responseType: 'blob' })
+    const url = URL.createObjectURL(data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'daycompass-export.json'
+    a.click()
+    URL.revokeObjectURL(url)
+    message.value = t('profile.exported')
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  }
+}
+
+async function deleteAccount() {
+  reset('password')
+  try {
+    await api.delete('/api/account', { data: { password: deletePassword.value } })
+    auth.logout()
+    router.push('/login')
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  }
+}
+
 function logout() {
   auth.logout()
   router.push('/login')
@@ -151,6 +182,24 @@ onMounted(async () => {
               autocomplete="new-password" class="w-full border rounded-lg px-3 py-2 text-sm" />
             <p v-if="section === 'password' && error" class="sr-only">{{ error }}</p>
             <button type="submit" class="border border-slate-400 text-slate-700 rounded-lg px-4 py-2 text-sm hover:bg-slate-50">{{ t('profile.changePassword') }}</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="bg-surface rounded-xl shadow p-4 space-y-3">
+        <h2 class="font-bold text-slate-800">{{ t('profile.yourData') }}</h2>
+        <p class="text-sm text-slate-600">{{ t('profile.exportHint') }}</p>
+        <button @click="exportData" class="border border-slate-400 text-slate-700 rounded-lg px-4 py-2 text-sm hover:bg-slate-50">⬇ {{ t('profile.export') }}</button>
+        <div class="border-t border-slate-200 pt-3 space-y-2">
+          <button v-if="!confirmDelete" @click="confirmDelete = true" class="text-sm text-danger underline">{{ t('profile.deleteAccount') }}</button>
+          <form v-else @submit.prevent="deleteAccount" class="space-y-2">
+            <p class="text-sm text-danger font-medium">{{ t('profile.deleteWarning') }}</p>
+            <input v-model="deletePassword" type="password" required autocomplete="current-password" :placeholder="t('profile.currentPassword')" :aria-label="t('profile.currentPassword')"
+              class="w-full border rounded-lg px-3 py-2 text-sm" />
+            <div class="flex gap-2">
+              <button type="submit" class="border-2 border-danger text-danger font-medium rounded-lg px-4 py-2 text-sm hover:bg-slate-50">{{ t('profile.deleteConfirm') }}</button>
+              <button type="button" @click="confirmDelete = false; deletePassword = ''" class="border border-slate-400 text-slate-600 rounded-lg px-4 py-2 text-sm hover:bg-slate-50">{{ t('common.cancel') }}</button>
+            </div>
           </form>
         </div>
       </section>

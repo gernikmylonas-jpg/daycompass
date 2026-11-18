@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { THEMES, MODES, useSettingsStore } from '../stores/settings'
+import { THEMES, MODES, BRIGHTNESS_MIN, BRIGHTNESS_MAX, useSettingsStore } from '../stores/settings'
 import { radioKeydown } from '../a11y'
 
 const { t } = useI18n()
@@ -88,6 +88,28 @@ onUnmounted(() => {
             <span v-if="settings.theme === th.id" class="text-ok" aria-hidden="true">✓</span>
           </button>
         </div>
+      </div>
+
+      <div class="border-t border-slate-200 pt-3 space-y-3">
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input v-model="settings.depth3d" type="checkbox" class="mt-1 h-4 w-4" />
+          <span>
+            <span class="block text-sm font-medium text-slate-800">{{ t('settings.depth') }}</span>
+            <span class="block text-xs text-slate-500">{{ t('settings.depthHint') }}</span>
+          </span>
+        </label>
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input v-model="settings.lidAnimation" type="checkbox" class="mt-1 h-4 w-4" />
+          <span>
+            <span class="block text-sm font-medium text-slate-800">{{ t('settings.lid') }}</span>
+            <span class="block text-xs text-slate-500">{{ t('settings.lidHint') }}</span>
+          </span>
+        </label>
+        <label class="block">
+          <span class="flex justify-between text-sm font-medium text-slate-800">{{ t('settings.brightness') }}<span class="tabular-nums text-slate-600">{{ settings.brightness }}%</span></span>
+          <input v-model.number="settings.brightness" type="range" :min="BRIGHTNESS_MIN" :max="BRIGHTNESS_MAX" step="5" class="w-full" />
+          <span class="block text-xs text-slate-500">{{ t('settings.brightnessHint') }}</span>
+        </label>
       </div>
 
       <label class="flex items-start gap-3 border-t border-slate-200 pt-3 cursor-pointer">

@@ -81,6 +81,31 @@ Click your name (top right on the compass) for your profile: name, email, passwo
 
 Compass style, light/dark mode, the needle cursor and the language are stored on the server (`/api/settings`), so they appear on any device once you sign in. This device's copy is only used until you are signed in. Calendar notes live in `calendar_events`.
 
+## Weekly habits, rest days, challenges, report
+
+- **Weekly habits** ("3 times a week", ISO weeks Monday–Sunday): their streak counts weeks that reached the target; the running week never breaks it.
+- **Rest days** (calendar → pick a day → *Rest day*; from a week back to three days ahead, at most 2 in any 7) bridge the gap for daily streaks.
+- **Group challenges**: the group owner sets a goal (check-ins, steps, meditation, …) for a date range; progress is measured from each member's own activity.
+- **Compass report** (`/report`): balance radar for the last 7/30 days plus patterns found in your own data (e.g. mood after good sleep).
+- **Journal lock**: optional PIN; entries are encrypted at rest with a key derived from it (scrypt + Fernet). The PIN is only kept in memory and sent as `X-Journal-Pin`; a forgotten PIN cannot be recovered.
+- **Your data**: Profile → download everything as JSON, or delete the account and all its data.
+- **Calendar notes by email**: a daily job (08:00, `EVENTS_HOUR`/`EVENTS_MINUTE`) mails the notes of the day, at most once per day.
+- **Sun times** for your place (Moon tab → *Use my location*; stays in the browser) and lunar-eclipse visibility.
+- **Installable / offline shell** (PWA, production build only). API data is never cached.
+
+## Extra calendars
+
+In the calendar, switch on any of: **public holidays** of a country (computed by the `holidays` package, any country), **Orthodox name days** (`frontend/src/calendars/nameDays.ts`, movable feasts from Orthodox Easter), **national days** of ~190 countries and **history & fun facts** (`history.ts`: add rows to `ROWS` in English and Greek). The choice follows the account. Notes can repeat yearly or weekly (a weekly timetable).
+
+## Steps and weight (North)
+
+- **Steps**: a progress ring for the chosen day (goal 8,000; a second lap after the goal), quick-add buttons (+500 … +5,000), a goal streak and a bar chart for 7 days / 30 days / 12 months (`/api/wellness/steps/series`).
+- **Weight**: one reading a day, a 7-day trend line (single readings are noisy), optional goal, height and BMI (off by default), kg or lb. It awards no points for a result, only badges for logging; a gentle note appears if the trend falls faster than ~1.5% of body weight a week.
+
+## Tests and CI
+
+`cd backend && pip install -r requirements-dev.txt && pytest` (needs the Postgres from docker compose; uses its own `daycompass_test` database). `cd frontend && npm test`. GitHub Actions (`.github/workflows/ci.yml`) runs both, plus `vue-tsc` and the build.
+
 ## Adding UI text
 
 Add every new string to all four files in `frontend/src/i18n/locales/`. `es`, `fr` and `el` are typed from `en.ts`, so a missing key fails `vue-tsc`.

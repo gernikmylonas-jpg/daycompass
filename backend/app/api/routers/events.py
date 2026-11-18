@@ -1,4 +1,3 @@
-import calendar as cal
 from datetime import date
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,6 +6,7 @@ from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
 from app.domain.models import CalendarEvent
 from app.application.schemas import EventCreate, EventResponse, BadgeInfo
+from app.application.services.calendar_events import occurrences_between
 from app.application.services.badges import award_badges
 
 router = APIRouter(prefix="/api/calendar/events", tags=["calendar"])
@@ -28,6 +28,8 @@ def _validate(payload: EventCreate) -> tuple[str, str | None]:
         raise HTTPException(status_code=422, detail=f"Title is too long (max {MAX_TITLE} characters)")
     if notes and len(notes) > MAX_NOTES:
         raise HTTPException(status_code=422, detail=f"Notes are too long (max {MAX_NOTES} characters)")
+    if payload.repeat_yearly and payload.repeat_weekly:
+        raise HTTPException(status_code=422, detail="Choose yearly or weekly repeat, not both")
     if payload.kind not in KINDS:
         raise HTTPException(status_code=422, detail="Invalid kind")
     if not MIN_YEAR <= payload.event_date.year <= MAX_YEAR:
@@ -35,17 +37,10 @@ def _validate(payload: EventCreate) -> tuple[str, str | None]:
     return title, notes
 
 
-def _occurrence(event_date: date, year: int) -> date:
-    """Yearly repeat: Feb 29 falls on Feb 28 in non-leap years."""
-    if event_date.month == 2 and event_date.day == 29 and not cal.isleap(year):
-        return date(year, 2, 28)
-    return date(year, event_date.month, event_date.day)
-
-
 def _to_response(e: CalendarEvent, on: date) -> EventResponse:
     return EventResponse(
         id=e.id, title=e.title, kind=e.kind, notes=e.notes,
-        repeat_yearly=e.repeat_yearly, date=on, original_date=e.event_date,
+        repeat_yearly=e.repeat_yearly, repeat_weekly=e.repeat_weekly, date=on, original_date=e.event_date,
     )
 
 
@@ -60,33 +55,7 @@ def list_events(
         raise HTTPException(status_code=422, detail="End date must not be before start date")
     if (end - start).days + 1 > MAX_RANGE_DAYS:
         raise HTTPException(status_code=422, detail=f"Range is limited to {MAX_RANGE_DAYS} days")
-
-    once = (
-        db.query(CalendarEvent)
-        .filter(
-            CalendarEvent.user_id == user_id,
-            CalendarEvent.repeat_yearly.is_(False),
-            CalendarEvent.event_date >= start,
-            CalendarEvent.event_date <= end,
-        )
-        .all()
-    )
-    yearly = (
-        db.query(CalendarEvent)
-        .filter(CalendarEvent.user_id == user_id, CalendarEvent.repeat_yearly.is_(True))
-        .all()
-    )
-
-    out = [_to_response(e, e.event_date) for e in once]
-    for e in yearly:
-        for year in range(start.year, end.year + 1):
-            if year < e.event_date.year:
-                continue
-            occ = _occurrence(e.event_date, year)
-            if start <= occ <= end:
-                out.append(_to_response(e, occ))
-    out.sort(key=lambda r: (r.date, r.title.lower()))
-    return out
+    return [_to_response(e, day) for e, day in occurrences_between(db, user_id, start, end)]
 
 
 @router.post("", response_model=EventResponse)
@@ -96,7 +65,7 @@ def create_event(payload: EventCreate, user_id: str = Depends(get_current_user_i
         raise HTTPException(status_code=422, detail="Too many events")
     event = CalendarEvent(
         user_id=user_id, event_date=payload.event_date, title=title, kind=payload.kind,
-        notes=notes, repeat_yearly=payload.repeat_yearly,
+        notes=notes, repeat_yearly=payload.repeat_yearly, repeat_weekly=payload.repeat_weekly,
     )
     db.add(event)
     new_badges = award_badges(db, user_id)
@@ -128,6 +97,7 @@ def update_event(
     event.kind = payload.kind
     event.event_date = payload.event_date
     event.repeat_yearly = payload.repeat_yearly
+    event.repeat_weekly = payload.repeat_weekly
     db.commit()
     return _to_response(event, event.event_date)
 

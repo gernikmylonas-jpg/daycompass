@@ -5,7 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
-from app.domain.models import Habit, CheckIn, PomodoroSession, StepLog, SleepLog, User, MeditationSession
+from app.domain.models import Habit, CheckIn, PomodoroSession, StepLog, SleepLog, User, MeditationSession, RestDay
 from app.application.schemas import HeatmapDay, CalendarEntry, PointsBreakdown, PointsSource, StreakResponse
 from app.application.services.points import POINTS_PER_CHECK_IN, POINTS_PER_POMODORO, POINTS_PER_MEDITATION
 from app.application.services.streaks import compute_streaks
@@ -125,5 +125,6 @@ def overall_streak(user_id: str = Depends(get_current_user_id), db: Session = De
         .join(Habit, Habit.id == CheckIn.habit_id)
         .filter(Habit.user_id == user_id, CheckIn.completed.is_(True))
     }
-    current, best = compute_streaks(dates, date.today())
+    rest = {d for (d,) in db.query(RestDay.rest_date).filter(RestDay.user_id == user_id)}
+    current, best = compute_streaks(dates, date.today(), rest)
     return StreakResponse(current=current, best=best, active_today=date.today() in dates)

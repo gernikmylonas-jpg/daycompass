@@ -96,6 +96,9 @@ export const BADGE_ART: Record<string, Art> = {
   steps_7: a('body', 'steps', 2),
   steps_30: a('body', 'steps', 3),
   steps_20k: a('body', 'mountain', 3),
+  steps_streak_7: a('body', 'flame', 2),
+  weight_first: a('body', 'target', 1),
+  weight_30: a('body', 'compass', 2),
   // north-east: sleep
   sleep_first: a('sleep', 'moon', 1),
   sleep_7: a('sleep', 'bed', 2),
@@ -132,6 +135,8 @@ export const BADGE_ART: Record<string, Art> = {
   group_join: a('groups', 'people', 1),
   group_create: a('groups', 'flag', 2),
   group_champion: a('groups', 'trophy', 3),
+  challenge_first: a('groups', 'flag', 1),
+  challenge_5: a('groups', 'trophy', 2),
 }
 
 export function artFor(code: string): Art | null {

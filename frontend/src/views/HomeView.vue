@@ -9,12 +9,14 @@ import { useSettingsStore } from '../stores/settings'
 import { useHabitsStore, type Category, type Habit, type HeatmapDay } from '../stores/habits'
 import Heatmap from '../components/Heatmap.vue'
 import CompassDial from '../components/CompassDial.vue'
+import CompassLid from '../components/CompassLid.vue'
 import CompassEmblem from '../components/CompassEmblem.vue'
 import DirectionMedallion from '../components/DirectionMedallion.vue'
 import PomodoroPanel from '../components/PomodoroPanel.vue'
 import GroupsPanel from '../components/GroupsPanel.vue'
 import CalendarPanel from '../components/CalendarPanel.vue'
 import WellnessPanel from '../components/WellnessPanel.vue'
+import WeightPanel from '../components/WeightPanel.vue'
 import AstronomyPanel from '../components/AstronomyPanel.vue'
 import JournalPanel from '../components/JournalPanel.vue'
 import MoodPanel from '../components/MoodPanel.vue'
@@ -44,6 +46,9 @@ const newNames = ref<Record<Category, string>>({
 const editingId = ref<string | null>(null)
 const editName = ref('')
 const editCategory = ref<Category>('body')
+const editFreq = ref('daily')
+const newFreq = ref('daily')
+const FREQUENCIES = ['daily', 'weekly:1', 'weekly:2', 'weekly:3', 'weekly:4', 'weekly:5', 'weekly:6']
 
 const selectedId = ref<string | null>(null)
 const selectedDays = ref<HeatmapDay[]>([])
@@ -151,11 +156,14 @@ const panelTitleEl = ref<HTMLElement | null>(null)
 const medallionEls: Partial<Record<DirId, HTMLElement>> = {}
 
 // An extra option inside a direction's card (like steps & sleep in the north)
-type ExtraKey = 'wellness' | 'astronomy' | 'journal' | 'mood' | 'meditation'
+type ExtraKey = 'wellness' | 'weight' | 'astronomy' | 'journal' | 'mood' | 'meditation'
 const openExtra = ref<ExtraKey | null>(null)
 const extras = computed<{ key: ExtraKey; icon: string; label: string }[]>(() => {
   switch (openDirection.value?.id) {
-    case 'n': return [{ key: 'wellness', icon: '👟', label: t('home.stepsHistory') }]
+    case 'n': return [
+      { key: 'wellness', icon: '👟', label: t('home.stepsHistory') },
+      { key: 'weight', icon: '⚖️', label: t('home.weightOption') },
+    ]
     case 'e': return [{ key: 'astronomy', icon: '🌙', label: t('home.astronomyOption') }]
     case 's': return [
       { key: 'journal', icon: '📓', label: t('home.journalOption') },
@@ -270,10 +278,13 @@ function closeSelected() {
   selectedDays.value = []
 }
 
+const freqLabel = (f: string) => (f === 'daily' ? t('home.freqDaily') : t('home.freqWeekly', Number(f.split(':')[1])))
+
 function startEdit(habit: Habit) {
   editingId.value = habit.id
   editName.value = habit.name
   editCategory.value = habit.category
+  editFreq.value = habit.frequency
 }
 
 function cancelEdit() {
@@ -285,7 +296,7 @@ async function saveEdit(habit: Habit) {
   if (!name) return
   error.value = ''
   try {
-    await habitsStore.updateHabit(habit, { name, category: editCategory.value })
+    await habitsStore.updateHabit(habit, { name, category: editCategory.value, frequency: editFreq.value })
     editingId.value = null
   } catch (e) {
     showError(e)
@@ -297,8 +308,9 @@ async function add(category: Category) {
   if (!name) return
   error.value = ''
   try {
-    await habitsStore.addHabit(name, category)
+    await habitsStore.addHabit(name, category, newFreq.value)
     newNames.value[category] = ''
+    newFreq.value = 'daily'
   } catch (e) {
     showError(e)
   }
@@ -416,8 +428,30 @@ function onPointerMove(e: PointerEvent) {
   const bearing = (Math.atan2(dx, -dy) * 180) / Math.PI // clockwise from north
   dialFace.value?.highlight(((bearing % 360) + 360) % 360)
   if (Math.hypot(dx, dy) > rect.width * 0.08) aimEmblem(bearing)
+  tiltDial(e, rect)
 }
-const onPointerGone = () => dialFace.value?.highlight(null)
+const onPointerGone = () => {
+  dialFace.value?.highlight(null)
+  resetTilt()
+}
+
+// 3D style: the dial leans slightly towards the pointer and the glass glare follows it
+const reducedMotionTilt = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+function tiltDial(e: PointerEvent, rect: DOMRect) {
+  const el = dialEl.value
+  if (!el || document.documentElement.dataset.depth !== '3d') return
+  const nx = Math.max(-1, Math.min(1, (e.clientX - (rect.left + rect.width / 2)) / (window.innerWidth / 2)))
+  const ny = Math.max(-1, Math.min(1, (e.clientY - (rect.top + rect.height / 2)) / (window.innerHeight / 2)))
+  el.style.setProperty('--tilt-y', reducedMotionTilt ? '0deg' : `${(nx * 7).toFixed(2)}deg`)
+  el.style.setProperty('--tilt-x', reducedMotionTilt ? '0deg' : `${(-ny * 7).toFixed(2)}deg`)
+  el.style.setProperty('--glare-x', `${(50 + nx * 38).toFixed(1)}%`)
+  el.style.setProperty('--glare-y', `${(50 + ny * 38).toFixed(1)}%`)
+}
+function resetTilt() {
+  const el = dialEl.value
+  if (!el) return
+  for (const k of ['--tilt-x', '--tilt-y', '--glare-x', '--glare-y']) el.style.removeProperty(k)
+}
 
 onMounted(async () => {
   document.addEventListener('keydown', onEscape)
@@ -477,8 +511,11 @@ onBeforeUnmount(() => {
 
         <section ref="dialEl" data-compass-target="main"
           class="relative z-10 aspect-square w-[min(100%,44rem,calc(100vh-10rem))] min-w-64 mx-auto lg:col-start-2 lg:row-start-1">
-          <div class="absolute inset-0 rounded-full bg-surface shadow-lg"></div>
-          <CompassDial ref="dialFace" class="absolute inset-0 w-full h-full" />
+          <div class="dial-bezel" aria-hidden="true"></div>
+          <div class="dial-body absolute inset-0 rounded-full bg-surface shadow-lg"></div>
+          <CompassDial ref="dialFace" class="dial-face absolute inset-0 w-full h-full" />
+          <div class="dial-glass" aria-hidden="true"></div>
+          <CompassLid />
 
           <!-- centre symbol (different for every compass style): opens points & badges -->
           <RouterLink to="/progress" :aria-label="`${t('home.centerLabel')}: ${auth.user?.total_points ?? 0}`"
@@ -534,6 +571,10 @@ onBeforeUnmount(() => {
                           {{ o.title }} – {{ o.subtitle }}
                         </option>
                       </select>
+                      <select v-model="editFreq" :aria-label="t('home.frequency')"
+                        class="w-full border rounded-lg px-2 py-1.5 text-sm">
+                        <option v-for="f in FREQUENCIES" :key="f" :value="f">{{ freqLabel(f) }}</option>
+                      </select>
                       <div class="flex gap-2">
                         <button type="submit"
                           class="bg-primary text-on-primary rounded-lg px-3 py-1 text-sm hover:bg-primary-hover">
@@ -556,8 +597,10 @@ onBeforeUnmount(() => {
                       <span :class="['flex-1 text-sm', h.checked_in_today ? 'line-through text-slate-500' : 'text-slate-700']">
                         {{ h.name }}
                       </span>
+                      <span v-if="h.target_per_week" class="text-xs text-slate-600 whitespace-nowrap mr-1"
+                        :title="t('home.weekProgress', { done: h.week_count, n: h.target_per_week })">{{ h.week_count }}/{{ h.target_per_week }}</span>
                       <span v-if="h.current_streak > 0" class="text-xs text-streak whitespace-nowrap mr-1"
-                        :title="t('home.bestStreak', { n: h.best_streak })">🔥 {{ h.current_streak }}</span>
+                        :title="h.target_per_week ? t('home.bestWeeks', { n: h.best_streak }) : t('home.bestStreak', { n: h.best_streak })">🔥 {{ h.current_streak }}{{ h.target_per_week ? t('home.weekSuffix') : '' }}</span>
                       <button @click="selectHabit(h)" :aria-pressed="selectedId === h.id"
                         :aria-label="t('home.heatmap')" :title="t('home.heatmap')"
                         :class="['w-7 h-7 inline-flex items-center justify-center rounded text-sm hover:bg-slate-100',
@@ -573,12 +616,15 @@ onBeforeUnmount(() => {
                   </li>
                 </ul>
 
-                <form @submit.prevent="add(openDirection.category)" class="flex gap-2">
+                <form @submit.prevent="add(openDirection.category)" class="flex flex-wrap gap-2">
                   <input v-model="newNames[openDirection.category]" data-add-input type="text" :placeholder="t('home.newHabit')"
                     :aria-label="`${openDirection.title}: ${t('home.newHabit')}`"
                     class="flex-1 min-w-0 border rounded-lg px-3 py-1.5 text-sm" />
                   <button type="submit" :aria-label="t('home.addHabit')"
                     class="bg-primary text-on-primary rounded-lg px-3 text-sm hover:bg-primary-hover">+</button>
+                  <select v-model="newFreq" :aria-label="t('home.frequency')" class="basis-full border rounded-lg px-2 py-1 text-xs text-slate-600">
+                    <option v-for="f in FREQUENCIES" :key="f" :value="f">{{ freqLabel(f) }}</option>
+                  </select>
                 </form>
 
                 <!-- a separate option for this direction: steps & sleep (N), calendars (E), journal (S) -->
@@ -594,6 +640,7 @@ onBeforeUnmount(() => {
             </div>
 
             <WellnessPanel v-if="openExtra === 'wellness'" :parts="['steps']" />
+            <WeightPanel v-if="openExtra === 'weight'" />
             <WellnessPanel v-if="openDirection.kind === 'sleep'" :parts="['sleep']" @saved="loadSleepToday" />
             <AstronomyPanel v-if="openExtra === 'astronomy'" />
             <JournalPanel v-if="openExtra === 'journal'" />

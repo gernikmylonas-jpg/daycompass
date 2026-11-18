@@ -132,6 +132,13 @@
 - [x] Καθημερινή υπενθύμιση αν δεν έγινε check-in — email, opt-in από το Home, στη γλώσσα του χρήστη, 20:00 (ρυθμιζόμενο)
 - [x] Νυχτερινό recalculation streaks/βαδίων (ασφαλές fallback) — 03:30: backfill πόντων στόχων, επανέλεγχος badges (streaks), αναφορά drift πόντων (μόνο log, δεν διορθώνει)
 
+## Extras μετά τη Φάση 10 — ✅ Ολοκληρώθηκαν
+
+- [x] Tests (pytest 26 + vitest 44) και CI (GitHub Actions)
+- [x] Αναφορά πυξίδας (radar + συσχετίσεις), εβδομαδιαίες συνήθειες, ημέρες ξεκούρασης
+- [x] Group challenges (+2 badges), κλείδωμα ημερολογίου με PIN (κρυπτογράφηση), εξαγωγή/διαγραφή λογαριασμού
+- [x] Email σημειώσεων ημερολογίου, PWA/offline shell, ανατολή/δύση και ορατότητα σεληνιακών εκλείψεων ανά τοποθεσία
+
 ## Φάση 11 — Device Integrations (Backend-only, χωρίς native app)
 
 - [ ] **Google Fit / Health Connect** — OAuth + REST API (βήματα, ύπνος, Android)

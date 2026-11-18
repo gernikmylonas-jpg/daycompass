@@ -93,6 +93,10 @@ onMounted(async () => {
         </ul>
       </section>
 
+      <RouterLink to="/report" class="block bg-surface rounded-xl shadow p-4 text-center font-medium text-slate-800 hover:bg-slate-50 border-t-4 border-teal-500">
+        📊 {{ t('report.open') }}
+      </RouterLink>
+
       <BadgesPanel />
     </div>
     <BadgeToast />

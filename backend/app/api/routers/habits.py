@@ -5,11 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
-from app.domain.models import Habit, CheckIn, HabitCategory
+from app.domain.models import Habit, CheckIn, HabitCategory, RestDay
 from app.application.schemas import (
     HabitCreate, HabitUpdate, HabitResponse, CheckInResponse, BadgeInfo, HeatmapDay,
 )
-from app.application.services.streaks import compute_streaks
+from app.application.services.streaks import compute_streaks, compute_weekly_streaks, week_start
 from app.application.services.badges import award_badges
 from app.application.services.points import POINTS_PER_CHECK_IN
 from app.application.services.realtime import notify_user_groups
@@ -17,8 +17,30 @@ from app.application.services.realtime import notify_user_groups
 router = APIRouter(prefix="/api/habits", tags=["habits"])
 
 
-def to_response(habit: Habit, dates: list[date], today: date) -> HabitResponse:
-    current, best = compute_streaks(dates, today)
+def parse_frequency(frequency: str) -> int | None:
+    """"daily" -> None; "weekly:3" -> 3 (times per week). Anything else is invalid."""
+    if frequency == "daily":
+        return None
+    kind, _, count = frequency.partition(":")
+    if kind == "weekly" and count.isdigit() and 1 <= int(count) <= 6:
+        return int(count)
+    raise HTTPException(status_code=422, detail="Invalid frequency")
+
+
+def _rest_days(db: Session, user_id: str) -> set[date]:
+    return {d for (d,) in db.query(RestDay.rest_date).filter(RestDay.user_id == user_id)}
+
+
+def to_response(habit: Habit, dates: list[date], today: date, rest_days: set[date] | None = None) -> HabitResponse:
+    try:
+        target = parse_frequency(habit.frequency)
+    except HTTPException:
+        target = None  # old rows with free-text frequency behave as daily
+    if target:
+        current, best = compute_weekly_streaks(dates, today, target)
+    else:
+        current, best = compute_streaks(dates, today, rest_days or ())
+    this_week = week_start(today)
     return HabitResponse(
         id=habit.id,
         name=habit.name,
@@ -27,6 +49,8 @@ def to_response(habit: Habit, dates: list[date], today: date) -> HabitResponse:
         checked_in_today=today in dates,
         current_streak=current,
         best_streak=best,
+        target_per_week=target,
+        week_count=sum(1 for d in set(dates) if week_start(d) == this_week),
     )
 
 
@@ -34,6 +58,7 @@ def to_response(habit: Habit, dates: list[date], today: date) -> HabitResponse:
 def create_habit(payload: HabitCreate, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     if payload.category not in [c.value for c in HabitCategory]:
         raise HTTPException(status_code=422, detail="Invalid category")
+    parse_frequency(payload.frequency)
 
     habit = Habit(
         user_id=user_id,
@@ -44,7 +69,7 @@ def create_habit(payload: HabitCreate, user_id: str = Depends(get_current_user_i
     db.add(habit)
     db.commit()
     db.refresh(habit)
-    return to_response(habit, [], date.today())
+    return to_response(habit, [], date.today(), _rest_days(db, user_id))
 
 
 @router.get("", response_model=list[HabitResponse])
@@ -59,7 +84,8 @@ def list_habits(user_id: str = Depends(get_current_user_id), db: Session = Depen
         )
         for habit_id, check_date in rows:
             dates_by_habit[habit_id].append(check_date)
-    return [to_response(h, dates_by_habit[h.id], today) for h in habits]
+    rest = _rest_days(db, user_id)
+    return [to_response(h, dates_by_habit[h.id], today, rest) for h in habits]
 
 
 def _own_habit(db: Session, habit_id: UUID, user_id: str) -> Habit:
@@ -87,6 +113,9 @@ def update_habit(
         if payload.category not in [c.value for c in HabitCategory]:
             raise HTTPException(status_code=422, detail="Invalid category")
         habit.category = payload.category
+    if payload.frequency is not None:
+        parse_frequency(payload.frequency)
+        habit.frequency = payload.frequency
 
     db.commit()
     db.refresh(habit)
@@ -95,7 +124,7 @@ def update_habit(
             CheckIn.habit_id == habit.id, CheckIn.completed.is_(True)
         )
     ]
-    return to_response(habit, dates, date.today())
+    return to_response(habit, dates, date.today(), _rest_days(db, user_id))
 
 
 @router.get("/{habit_id}/heatmap", response_model=list[HeatmapDay])

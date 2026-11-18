@@ -8,6 +8,8 @@ import { apiErrorMessage } from '../i18n/errors'
 import { intlLocale } from '../i18n'
 import { formatDate, parseIso } from '../i18n/dates'
 import DateField from './DateField.vue'
+import StepsRing from './StepsRing.vue'
+import StepsChart, { type StepBucket } from './StepsChart.vue'
 
 interface WellnessDay {
   date: string
@@ -83,6 +85,41 @@ function formatDay(iso: string) {
   return `${weekday} ${formatDate(iso)}`
 }
 
+// ── the interactive steps part: a ring for the chosen day, quick-add buttons and a chart ──
+const QUICK_ADD = [500, 1000, 2500, 5000]
+const period = ref<'week' | 'month' | 'year'>('week')
+const series = ref<{ goal: number; today: number | null; goal_streak: number; buckets: StepBucket[] } | null>(null)
+const dayInWindow = computed(() => !!summary.value?.days.some((d) => d.date === date.value))
+const savedSteps = computed(() => summary.value?.days.find((d) => d.date === date.value)?.steps ?? 0)
+
+async function loadSeries() {
+  if (!showSteps.value) return
+  try {
+    series.value = (await api.get('/api/wellness/steps/series', { params: { period: period.value } })).data
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  }
+}
+
+async function bump(n: number) {
+  error.value = ''
+  message.value = ''
+  busy.value = true
+  try {
+    const { data } = await api.put<LogResult>('/api/wellness/steps', { steps: Math.min(100000, savedSteps.value + n), log_date: date.value })
+    await afterSave(data)
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+function setPeriod(p: 'week' | 'month' | 'year') {
+  period.value = p
+  loadSeries()
+}
+
 const stepGoal = computed(() => summary.value?.step_goal ?? 8000)
 const sleepGoal = computed(() => summary.value?.sleep_goal_minutes ?? 420)
 
@@ -109,7 +146,7 @@ async function removeDay(d: WellnessDay) {
   try {
     if (showSteps.value && d.steps != null) await api.delete(`/api/wellness/steps/${d.date}`)
     if (showSleep.value && d.sleep_minutes != null) await api.delete(`/api/wellness/sleep/${d.date}`)
-    await Promise.all([load(), loadHistory(true)])
+    await Promise.all([load(), loadHistory(true), loadSeries()])
     emit('saved')
   } catch (e) {
     error.value = apiErrorMessage(e)
@@ -146,7 +183,7 @@ async function afterSave(result: LogResult) {
   if (result.points_awarded > 0) await auth.refreshUser().catch(() => {})
   await badgesStore.announce(result.new_badges)
   const keepDate = date.value
-  await Promise.all([load(), loadHistory(true)])
+  await Promise.all([load(), loadHistory(true), loadSeries()])
   date.value = keepDate
   fillForm()
   emit('saved')
@@ -206,6 +243,7 @@ watch(date, () => {
 onMounted(() => {
   load()
   loadHistory(true)
+  loadSeries()
 })
 </script>
 
@@ -225,6 +263,30 @@ onMounted(() => {
         <p class="text-2xl font-bold text-slate-800">{{ formatDuration(summary.avg_sleep_minutes_7d) }}</p>
         <p class="text-xs text-slate-500">{{ t('wellness.goalSleep', { n: formatDuration(sleepGoal) }) }}</p>
       </div>
+    </section>
+
+    <section v-if="showSteps && summary && dayInWindow" class="bg-surface rounded-xl shadow p-4 space-y-3 border-t-4 border-teal-500">
+      <StepsRing :steps="savedSteps" :goal="stepGoal" :streak="series?.goal_streak ?? 0" />
+      <div class="flex flex-wrap justify-center gap-2" role="group" :aria-label="t('steps.quickAdd')">
+        <button v-for="n in QUICK_ADD" :key="n" type="button" :disabled="busy" @click="bump(n)"
+          class="rounded-full border border-slate-400 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 active:scale-95 transition disabled:opacity-50">
+          +{{ n.toLocaleString(loc) }}
+        </button>
+      </div>
+      <p class="text-xs text-slate-500 text-center">{{ t('steps.quickHint', { date: formatDate(date) }) }}</p>
+    </section>
+
+    <section v-if="showSteps && series" class="bg-surface rounded-xl shadow p-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h2 class="font-bold text-slate-800">{{ t('steps.chart') }}</h2>
+        <div class="flex gap-1" role="radiogroup" :aria-label="t('steps.chart')">
+          <button v-for="p in (['week', 'month', 'year'] as const)" :key="p" type="button" role="radio" :aria-checked="period === p" @click="setPeriod(p)"
+            :class="['rounded-lg px-3 py-1 text-xs', period === p ? 'bg-primary text-on-primary' : 'border border-slate-400 text-slate-600 hover:bg-slate-50']">
+            {{ t(`steps.periods.${p}`) }}
+          </button>
+        </div>
+      </div>
+      <StepsChart :buckets="series.buckets" :goal="series.goal" :period="period" />
     </section>
 
     <section class="bg-surface rounded-xl shadow p-4 space-y-4">

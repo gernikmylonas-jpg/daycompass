@@ -5,7 +5,7 @@ import { intlLocale } from '../i18n'
 import { formatDate, formatDateTime, formatTime } from '../i18n/dates'
 import {
   phaseEventsForYear, moonStateAt, nextPhase, eclipsesForYear, seasonsForYear, METEOR_SHOWERS,
-  type Eclipse, type PhaseEvent,
+  sunTimes, moonAltitudeAtLunarEclipse, type Eclipse, type PhaseEvent, type Place,
 } from '../astronomy'
 import MoonIcon from './MoonIcon.vue'
 
@@ -127,6 +127,72 @@ const showers = computed(() =>
     return { ...s, peak, light, quality: light < 0.25 ? 'dark' : light < 0.6 ? 'some' : 'bright' }
   }),
 )
+
+// ── your place: sunrise, sunset and whether a lunar eclipse can be seen from there ──
+const PLACE_KEY = 'daycompass-place'
+function loadPlace(): Place | null {
+  try {
+    const p = JSON.parse(localStorage.getItem(PLACE_KEY) ?? 'null')
+    return p && Number.isFinite(p.lat) && Number.isFinite(p.lon) ? p : null
+  } catch {
+    return null
+  }
+}
+const place = ref<Place | null>(loadPlace())
+const latText = ref(place.value ? String(place.value.lat) : '')
+const lonText = ref(place.value ? String(place.value.lon) : '')
+const placeError = ref('')
+
+function setPlace(p: Place | null) {
+  place.value = p
+  try {
+    if (p) localStorage.setItem(PLACE_KEY, JSON.stringify(p))
+    else localStorage.removeItem(PLACE_KEY)
+  } catch { /* storage unavailable: the place just isn't remembered */ }
+}
+function savePlace() {
+  const lat = Number(latText.value.replace(',', '.'))
+  const lon = Number(lonText.value.replace(',', '.'))
+  if (!latText.value || !lonText.value || !(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180)) {
+    placeError.value = t('astro.place.invalid')
+    return
+  }
+  placeError.value = ''
+  setPlace({ lat, lon })
+}
+function useMyLocation() {
+  placeError.value = ''
+  if (!navigator.geolocation) {
+    placeError.value = t('astro.place.unsupported')
+    return
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      latText.value = pos.coords.latitude.toFixed(3)
+      lonText.value = pos.coords.longitude.toFixed(3)
+      setPlace({ lat: Number(latText.value), lon: Number(lonText.value) })
+    },
+    () => { placeError.value = t('astro.place.denied') },
+    { timeout: 10_000 },
+  )
+}
+function forgetPlace() {
+  setPlace(null)
+  latText.value = lonText.value = ''
+}
+
+const sunToday = computed(() => {
+  if (!place.value) return null
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return sunTimes(start.getTime(), place.value)
+})
+const dayLength = computed(() => {
+  const m = sunToday.value?.dayLengthMinutes ?? 0
+  return t('wellness.duration', { h: Math.floor(m / 60), m: m % 60 })
+})
+// a lunar eclipse is seen by everyone for whom the Moon is above the horizon at maximum
+const lunarVisible = (e: Eclipse): boolean | null =>
+  place.value && e.kind === 'lunar' ? moonAltitudeAtLunarEclipse(e.date.getTime(), place.value) > 0 : null
 </script>
 
 <template>
@@ -145,6 +211,32 @@ const showers = computed(() =>
           {{ t('astro.nextFull') }}: {{ formatDateTime(nextFull.date) }}
         </p>
       </div>
+    </section>
+
+    <!-- the Sun where you are -->
+    <section class="bg-surface rounded-xl shadow p-4 space-y-2 border-t-4 border-amber-500">
+      <h3 class="font-bold text-slate-800">☀ {{ t('astro.place.title') }}</h3>
+      <div v-if="sunToday" class="text-sm text-slate-700 space-y-1">
+        <p v-if="sunToday.polar === 'day'">{{ t('astro.place.polarDay') }}</p>
+        <p v-else-if="sunToday.polar === 'night'">{{ t('astro.place.polarNight') }}</p>
+        <p v-else class="flex flex-wrap gap-x-5 gap-y-1">
+          <span>🌅 {{ t('astro.place.sunrise') }}: <b class="tabular-nums">{{ sunToday.sunrise ? formatTime(sunToday.sunrise) : '—' }}</b></span>
+          <span>🌇 {{ t('astro.place.sunset') }}: <b class="tabular-nums">{{ sunToday.sunset ? formatTime(sunToday.sunset) : '—' }}</b></span>
+          <span>⏱ {{ t('astro.place.dayLength') }}: <b>{{ dayLength }}</b></span>
+        </p>
+        <p class="text-xs text-slate-500">{{ t('astro.place.saved', { lat: place!.lat, lon: place!.lon }) }}
+          <button type="button" @click="forgetPlace" class="underline ml-1">{{ t('astro.place.forget') }}</button></p>
+      </div>
+      <form v-else @submit.prevent="savePlace" class="space-y-2">
+        <p class="text-xs text-slate-500">{{ t('astro.place.hint') }}</p>
+        <div class="flex flex-wrap gap-2">
+          <input v-model="latText" inputmode="decimal" :placeholder="t('astro.place.lat')" :aria-label="t('astro.place.lat')" class="border rounded-lg px-3 py-1.5 text-sm w-32" />
+          <input v-model="lonText" inputmode="decimal" :placeholder="t('astro.place.lon')" :aria-label="t('astro.place.lon')" class="border rounded-lg px-3 py-1.5 text-sm w-32" />
+          <button type="submit" class="bg-primary text-on-primary rounded-lg px-3 py-1.5 text-sm hover:bg-primary-hover">{{ t('common.save') }}</button>
+          <button type="button" @click="useMyLocation" class="border border-slate-400 text-slate-700 rounded-lg px-3 py-1.5 text-sm hover:bg-slate-50">📍 {{ t('astro.place.use') }}</button>
+        </div>
+      </form>
+      <p v-if="placeError" role="alert" class="text-danger text-sm">{{ placeError }}</p>
     </section>
 
     <section class="bg-surface rounded-xl shadow p-4">
@@ -228,11 +320,14 @@ const showers = computed(() =>
               <p class="font-medium text-slate-800">{{ eclipseLabel(e) }}</p>
               <p class="text-slate-600">{{ formatDateTime(e.date) }}</p>
               <p v-if="e.magnitude !== null" class="text-xs text-slate-500">{{ t('astro.eclipse.magnitude', { n: e.magnitude.toFixed(2) }) }}</p>
+              <p v-if="lunarVisible(e) !== null" :class="['text-xs font-medium', lunarVisible(e) ? 'text-ok' : 'text-slate-500']">
+                {{ lunarVisible(e) ? '👁 ' + t('astro.eclipse.visible') : t('astro.eclipse.notVisible') }}
+              </p>
             </div>
           </li>
         </ul>
         <p v-else class="text-sm text-slate-500">{{ t('astro.eclipse.none') }}</p>
-        <p class="text-xs text-slate-500">{{ t('astro.eclipse.note') }}</p>
+        <p class="text-xs text-slate-500">{{ t('astro.eclipse.note') }} {{ place ? t('astro.eclipse.solarNote') : t('astro.eclipse.placeNote') }}</p>
       </div>
 
       <!-- SKY EVENTS: seasons and meteor showers -->
