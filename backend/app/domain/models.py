@@ -210,6 +210,9 @@ class UserSettings(Base):
     depth_3d = Column(Boolean, nullable=False, default=False)
     brightness = Column(Integer, nullable=False, default=100)
     lid_open = Column(Boolean, nullable=False, default=False)
+    wallpaper = Column(String, nullable=True)  # id of the chosen wallpaper (must be unlocked)
+    wallpapers_on = Column(Boolean, nullable=False, default=False)
+    quests_on = Column(Boolean, nullable=False, default=False)
     calendar_prefs = Column(Text, nullable=True)  # JSON: which calendar layers are shown
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
@@ -325,3 +328,120 @@ class WeightProfile(Base):
     goal_kg = Column(Float, nullable=True)
     unit = Column(String, nullable=False, default="kg")  # kg | lb
     show_bmi = Column(Boolean, nullable=False, default=False)
+
+
+# ─── Nuggets: what has been spent on wallpapers ──────────
+
+class WallpaperUnlock(Base):
+    __tablename__ = "wallpaper_unlocks"
+    __table_args__ = (UniqueConstraint("user_id", "wallpaper_id", name="uq_wallpaper_unlock"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    wallpaper_id = Column(String, nullable=False)
+    cost = Column(Integer, nullable=False)  # nuggets paid, kept even if the price changes later
+    unlocked_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+# ─── Personal goals with a deadline ─────────────────────
+
+class Goal(Base):
+    __tablename__ = "goals"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    metric = Column(String, nullable=False)  # same metrics as group challenges
+    target = Column(Integer, nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+# ─── Water, workouts, gratitude, daily quests ───────────
+
+class WaterLog(Base):
+    __tablename__ = "water_logs"
+    __table_args__ = (UniqueConstraint("user_id", "log_date", name="uq_water_log_day"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    log_date = Column(Date, nullable=False, default=date.today)
+    glasses = Column(Integer, nullable=False)
+
+
+class Workout(Base):
+    __tablename__ = "workouts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    workout_date = Column(Date, nullable=False, default=date.today, index=True)
+    kind = Column(String, nullable=False)
+    minutes = Column(Integer, nullable=False)
+    note = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class GratitudeEntry(Base):
+    __tablename__ = "gratitude_entries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    entry_date = Column(Date, nullable=False, default=date.today, index=True)
+    text = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class QuestReward(Base):
+    """One row per day a quest was completed and its nugget claimed."""
+    __tablename__ = "quest_rewards"
+    __table_args__ = (UniqueConstraint("user_id", "reward_date", name="uq_quest_reward_day"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    reward_date = Column(Date, nullable=False)
+    quest_id = Column(String, nullable=False)
+
+
+class ProfilePhoto(Base):
+    __tablename__ = "profile_photos"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    mime = Column(String, nullable=False)
+    data = Column(LargeBinary, nullable=False)
+    share_with_groups = Column(Boolean, nullable=False, default=False)  # opt-in: people in my groups may see it
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+# ─── Group shared habits and cheers ─────────────────────
+
+class GroupHabit(Base):
+    __tablename__ = "group_habits"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class GroupHabitCheck(Base):
+    __tablename__ = "group_habit_checks"
+    __table_args__ = (UniqueConstraint("habit_id", "user_id", "check_date", name="uq_group_habit_check"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    habit_id = Column(UUID(as_uuid=True), ForeignKey("group_habits.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    check_date = Column(Date, nullable=False)
+
+
+class Cheer(Base):
+    __tablename__ = "cheers"
+    __table_args__ = (UniqueConstraint("group_id", "from_user", "to_user", "cheer_date", name="uq_cheer_pair_day"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"), nullable=False, index=True)
+    from_user = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    to_user = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    emoji = Column(String, nullable=False)
+    cheer_date = Column(Date, nullable=False)

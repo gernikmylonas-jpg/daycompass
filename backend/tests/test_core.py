@@ -72,9 +72,9 @@ def test_mood_scale_and_style_setting(user):
     base = {"theme": "classic", "mode": "light", "needle_cursor": True, "language": "en"}
     assert user.put("/api/settings", json={**base, "mood_style": "words"}).json()["mood_style"] == "words"
     assert user.put("/api/settings", json={**base, "mood_style": "pirate"}).status_code == 422
-    assert user.get("/api/settings").json() == {
-        **base, "mood_style": "words", "depth_3d": False, "lid_open": False, "brightness": 100, "calendar_prefs": None, "saved": True,
-    }
+    stored = user.get("/api/settings").json()
+    expected = {**base, "mood_style": "words", "depth_3d": False, "lid_open": False, "brightness": 100, "saved": True}
+    assert {k: stored[k] for k in expected} == expected  # new settings may be added without breaking this
 
 
 def test_compass_look_settings(user):

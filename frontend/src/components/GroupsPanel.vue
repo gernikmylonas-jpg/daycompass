@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import api from '../api'
+import api, { wsBase } from '../api'
 import { apiErrorMessage } from '../i18n/errors'
 import ChallengesSection from './ChallengesSection.vue'
+import Avatar from './Avatar.vue'
+import GroupHabitsSection from './GroupHabitsSection.vue'
 import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 
 interface GroupSummary {
@@ -22,6 +24,7 @@ interface LeaderboardEntry {
   name: string
   points: number
   is_me: boolean
+  has_photo?: boolean
 }
 
 interface GroupDetail {
@@ -53,7 +56,7 @@ function showError(e: unknown) {
   error.value = apiErrorMessage(e)
 }
 
-const WS_BASE = String(api.defaults.baseURL).replace(/^http/, 'ws')
+const WS_BASE = wsBase()
 const MAX_BACKOFF_MS = 15000
 const PING_MS = 25000
 
@@ -139,6 +142,7 @@ function openSocket() {
 }
 
 const challengesRef = ref<InstanceType<typeof ChallengesSection> | null>(null)
+const habitsRef = ref<InstanceType<typeof GroupHabitsSection> | null>(null)
 
 async function refreshSelected() {
   const id = socketGroupId
@@ -148,6 +152,7 @@ async function refreshSelected() {
     if (socketGroupId === id) selected.value = data
     loadGroups()
     challengesRef.value?.reload()
+    habitsRef.value?.reload()
   } catch {
     // transient failure; the next event or reconnect will refresh again
   }
@@ -327,6 +332,7 @@ onUnmounted(disconnectSocket)
           :class="['flex items-center justify-between py-2 px-2 text-sm', e.is_me ? 'bg-amber-50 rounded' : '']">
           <span class="flex items-center gap-3">
             <span class="w-8 text-center text-lg">{{ medals[e.rank - 1] ?? e.rank }}</span>
+            <Avatar :user-id="e.user_id" :name="e.name" :has="!!e.has_photo" :size="30" />
             <span :class="e.is_me ? 'font-bold text-slate-800' : 'text-slate-700'">
               {{ e.name }}<span v-if="e.is_me" class="text-slate-500 font-normal"> ({{ t('groups.you') }})</span>
             </span>
@@ -336,6 +342,8 @@ onUnmounted(disconnectSocket)
       </ol>
 
       <ChallengesSection ref="challengesRef" :group-id="selected.id" :is-owner="selected.is_owner" />
+
+      <GroupHabitsSection ref="habitsRef" :group-id="selected.id" :members="selected.leaderboard" />
 
       <div class="flex justify-end gap-2 pt-2">
         <button @click="leaveGroup" class="text-sm border border-slate-400 text-slate-600 rounded-lg px-3 py-1 hover:bg-slate-50">

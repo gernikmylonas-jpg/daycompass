@@ -6,8 +6,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id, verify_password
+from app.application.services.group_cleanup import drop_group_extras
 from app.domain.models import (
-    WeightLog, WeightProfile,
+    WeightLog, WeightProfile, WallpaperUnlock, Goal, WaterLog, Workout, GratitudeEntry, QuestReward, ProfilePhoto, GroupHabit, GroupHabitCheck, Cheer,
     User, Habit, CheckIn, PomodoroSession, StepLog, SleepLog, MoodLog, MeditationSession, JournalEntry, JournalAudio,
     CalendarEvent, RestDay, UserBadge, Badge, UserSettings, ReminderSetting, ReminderLog, EventMailLog, JournalLock,
     Group, GroupMember, Challenge,
@@ -78,6 +79,15 @@ def export_data(
             "profile": {"height_cm": wp.height_cm, "goal_kg": wp.goal_kg, "unit": wp.unit, "show_bmi": wp.show_bmi} if wp else None,
             "entries": [{"date": w.log_date, "kg": w.kg} for w in db.query(WeightLog).filter(WeightLog.user_id == user_id).order_by(WeightLog.log_date)],
         },
+        "wallpapers_unlocked": [{"id": w.wallpaper_id, "cost": w.cost, "unlocked_at": w.unlocked_at}
+                                for w in db.query(WallpaperUnlock).filter(WallpaperUnlock.user_id == user_id)],
+        "goals": [{"title": g.title, "metric": g.metric, "target": g.target, "start": g.start_date, "end": g.end_date}
+                  for g in db.query(Goal).filter(Goal.user_id == user_id)],
+        "water": [{"date": w.log_date, "glasses": w.glasses} for w in db.query(WaterLog).filter(WaterLog.user_id == user_id)],
+        "workouts": [{"date": w.workout_date, "kind": w.kind, "minutes": w.minutes, "note": w.note} for w in db.query(Workout).filter(Workout.user_id == user_id)],
+        "gratitude": [{"date": g.entry_date, "text": g.text} for g in db.query(GratitudeEntry).filter(GratitudeEntry.user_id == user_id)],
+        "quests_completed": [{"date": q.reward_date, "quest": q.quest_id} for q in db.query(QuestReward).filter(QuestReward.user_id == user_id)],
+        "has_profile_photo": db.query(ProfilePhoto).filter(ProfilePhoto.user_id == user_id).first() is not None,
         "rest_days": [r.rest_date for r in db.query(RestDay).filter(RestDay.user_id == user_id)],
         "badges": [{"code": code, "awarded_at": at} for code, at in
                    db.query(Badge.code, UserBadge.awarded_at).join(UserBadge, UserBadge.badge_id == Badge.id).filter(UserBadge.user_id == user_id)],
@@ -105,7 +115,14 @@ def delete_user_data(db: Session, user_id) -> None:
         else:
             db.query(GroupMember).filter(GroupMember.group_id == group.id).delete(synchronize_session=False)
             db.query(Challenge).filter(Challenge.group_id == group.id).delete(synchronize_session=False)
+            drop_group_extras(db, group.id)
             db.delete(group)
+    db.flush()
+    # what this person did inside groups that carry on without them
+    db.query(GroupHabitCheck).filter(GroupHabitCheck.user_id == user_id).delete(synchronize_session=False)
+    db.query(Cheer).filter((Cheer.from_user == user_id) | (Cheer.to_user == user_id)).delete(synchronize_session=False)
+    for h in db.query(GroupHabit).filter(GroupHabit.created_by == user_id).all():
+        h.created_by = db.query(Group.owner_id).filter(Group.id == h.group_id).scalar()
     db.flush()
 
     entry_ids = [e for (e,) in db.query(JournalEntry.id).filter(JournalEntry.user_id == user_id)]
@@ -115,7 +132,7 @@ def delete_user_data(db: Session, user_id) -> None:
     if habit_ids:
         db.query(CheckIn).filter(CheckIn.habit_id.in_(habit_ids)).delete(synchronize_session=False)
     for model in (JournalEntry, Habit, MoodLog, MeditationSession, CalendarEvent, StepLog, SleepLog, PomodoroSession,
-                  RestDay, WeightLog, WeightProfile, UserBadge, UserSettings, ReminderSetting, ReminderLog, EventMailLog, JournalLock, GroupMember):
+                  RestDay, WeightLog, WeightProfile, WallpaperUnlock, Goal, WaterLog, Workout, GratitudeEntry, QuestReward, ProfilePhoto, UserBadge, UserSettings, ReminderSetting, ReminderLog, EventMailLog, JournalLock, GroupMember):
         db.query(model).filter(model.user_id == user_id).delete(synchronize_session=False)
     db.query(User).filter(User.id == user_id).delete(synchronize_session=False)
     db.commit()

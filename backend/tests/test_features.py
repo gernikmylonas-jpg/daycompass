@@ -255,3 +255,216 @@ def test_steps_streak_and_weight_badges(user):
     got = {b["code"] for b in user.get("/api/badges").json() if b.get("earned")}
     assert {"steps_streak_7", "weight_first"} <= got and "weight_30" not in got
     assert [b["code"] for b in first["new_badges"]] == ["weight_first"]
+
+
+def test_nuggets_economy_and_wallpapers(user):
+    from app.infrastructure.database import SessionLocal
+    from app.domain.models import User
+    n = user.get("/api/nuggets").json()
+    assert n["balance"] == 0 and n["points_per_nugget"] == 10 and n["next_in"] == 10 and len(n["catalog"]) >= 10
+    assert user.post("/api/nuggets/wallpapers/topo/unlock").status_code == 422  # not enough nuggets
+    assert user.post("/api/nuggets/wallpapers/nope/unlock").status_code == 404
+
+    me = user.get("/api/auth/me").json()
+    db = SessionLocal()
+    db.query(User).filter(User.id == me["id"]).update({User.total_points: 127})  # 12 nuggets, 7 points towards the next
+    db.commit()
+    db.close()
+    n = user.get("/api/nuggets").json()
+    assert (n["earned"], n["balance"], n["next_in"]) == (12, 12, 3)
+
+    after = user.post("/api/nuggets/wallpapers/topo/unlock").json()  # costs 5
+    assert (after["spent"], after["balance"]) == (5, 7) and [u["id"] for u in after["unlocked"]] == ["topo"]
+    assert user.post("/api/nuggets/wallpapers/topo/unlock").status_code == 409
+    assert user.post("/api/nuggets/wallpapers/aurora/unlock").status_code == 422  # costs 25, 7 left
+    assert user.get("/api/auth/me").json()["total_points"] == 127  # spending never touches points
+
+    base = {"theme": "classic", "mode": "light", "needle_cursor": True, "language": "en"}
+    assert user.put("/api/settings", json={**base, "wallpaper": "forest", "wallpapers_on": True}).status_code == 422  # locked
+    ok = user.put("/api/settings", json={**base, "wallpaper": "topo", "wallpapers_on": True}).json()
+    assert ok["wallpaper"] == "topo" and ok["wallpapers_on"] is True
+    assert user.get("/api/account/export").json()["wallpapers_unlocked"][0]["id"] == "topo"
+
+
+def test_goals_with_deadline_progress_and_privacy(user, other):
+    from datetime import date, timedelta
+    today = date.today()
+    body = {"title": "Walk 20k", "metric": "steps", "target": 20000, "start_date": str(today - timedelta(days=2)), "end_date": str(today + timedelta(days=3))}
+    assert user.post("/api/goals", json={**body, "metric": "nope"}).status_code == 422
+    assert user.post("/api/goals", json={**body, "target": 0}).status_code == 422
+    assert user.post("/api/goals", json={**body, "end_date": str(today - timedelta(days=5))}).status_code == 422
+    g = user.post("/api/goals", json=body).json()
+    assert g["status"] == "active" and g["progress"] == 0 and g["days_left"] == 4 and g["needed_per_day"] == 5000
+    user.put("/api/wellness/steps", json={"steps": 12000, "log_date": str(today)})
+    g = user.get("/api/goals").json()[0]
+    assert g["progress"] == 12000 and g["percent"] == 60 and g["needed_per_day"] == 2000
+    user.put("/api/wellness/steps", json={"steps": 20000, "log_date": str(today - timedelta(days=1))})
+    assert user.get("/api/goals").json()[0]["status"] == "done"
+    assert other.get("/api/goals").json() == []
+    assert other.delete(f"/api/goals/{g['id']}").status_code == 404
+    assert user.delete(f"/api/goals/{g['id']}").status_code == 200
+
+
+def test_year_review_totals(user):
+    from datetime import date
+    today = date.today()
+    h = user.post("/api/habits", json={"name": "Read", "frequency": "daily", "category": "mind"}).json()
+    user.post(f"/api/habits/{h['id']}/check-in")
+    user.put("/api/wellness/steps", json={"steps": 9000, "log_date": str(today)})
+    user.put("/api/mood", json={"score": 8})
+    r = user.get("/api/insights/year", params={"year": today.year}).json()
+    assert r["checkins"] == 1 and r["active_days"] == 1 and r["best_streak"] == 1
+    assert r["checkins_by_month"][today.month - 1] == 1 and r["best_month"] == today.month
+    assert r["top_habits"] == [{"name": "Read", "count": 1}] and r["steps_total"] == 9000 and r["step_goal_days"] == 1
+    assert r["mood_avg"] == 8.0 and r["badges_earned"] >= 1
+    assert user.get("/api/insights/year", params={"year": 1999}).status_code == 422
+    assert user.get("/api/insights/year", params={"year": today.year + 1}).status_code == 422
+
+
+def test_water_workouts_gratitude(user, other):
+    from datetime import date
+    today = str(date.today())
+    assert user.put(f"/api/water/{today}", json={"glasses": 99}).status_code == 422
+    user.put(f"/api/water/{today}", json={"glasses": 8})
+    w = user.get("/api/water").json()
+    assert w["today"] == 8 and w["goal_streak"] == 1 and w["goal"] == 8 and len(w["days"]) == 14
+    assert user.post("/api/workouts", json={"kind": "flying", "minutes": 20}).status_code == 422
+    assert user.post("/api/workouts", json={"kind": "run", "minutes": 0}).status_code == 422
+    user.post("/api/workouts", json={"kind": "run", "minutes": 30, "note": "park"})
+    user.post("/api/workouts", json={"kind": "yoga", "minutes": 20})
+    wk = user.get("/api/workouts").json()
+    assert wk["total_minutes"] == 50 and wk["by_kind"] == {"run": 30, "yoga": 20} and len(wk["items"]) == 2
+    assert other.get("/api/workouts").json()["items"] == []
+    assert user.delete(f"/api/workouts/{wk['items'][0]['id']}").status_code == 200
+    for i in range(5):
+        assert user.post("/api/gratitude", json={"text": f"thing {i}"}).status_code == 200
+    assert user.post("/api/gratitude", json={"text": "sixth"}).status_code == 422  # five a day
+    assert user.post("/api/gratitude", json={"text": "  "}).status_code == 422
+    g = user.get("/api/gratitude").json()
+    assert g["total"] == 5 and other.get("/api/gratitude").json()["items"] == []
+    export = user.get("/api/account/export").json()
+    assert len(export["gratitude"]) == 5 and len(export["workouts"]) == 1 and export["water"][0]["glasses"] == 8
+
+
+import pytest
+from app.api.routers import quests as quests_module
+
+
+@pytest.mark.parametrize("quest", quests_module.QUESTS, ids=[q[0] for q in quests_module.QUESTS])
+def test_daily_quest_claim_gives_one_nugget(user, monkeypatch, quest):
+    from datetime import date
+    monkeypatch.setattr(quests_module, "quest_for", lambda user_id, day: quest)  # try every kind of quest
+    q = user.get("/api/quests/today").json()
+    assert not q["done"] and not q["claimed"] and q["reward_nuggets"] == 1
+    assert user.post("/api/quests/today/claim").status_code == 422  # not finished
+    # finish whatever today's quest is
+    today = str(date.today())
+    metric, target = q["metric"], q["target"]
+    if metric == "checkins":
+        for i in range(target):
+            h = user.post("/api/habits", json={"name": f"h{i}", "frequency": "daily", "category": "mind"}).json()
+            user.post(f"/api/habits/{h['id']}/check-in")
+    elif metric == "steps":
+        user.put("/api/wellness/steps", json={"steps": target})
+    elif metric == "meditation_minutes":
+        user.post("/api/meditation", json={"duration_minutes": target})
+    elif metric == "pomodoros":
+        for _ in range(target):
+            user.post("/api/pomodoro", json={"duration_minutes": 25, "kind": "work"})
+    elif metric == "journal_entries":
+        user.post("/api/journal", data={"content": "x", "entry_date": today})
+    elif metric == "mood_logs":
+        user.put("/api/mood", json={"score": 7})
+    elif metric == "water":
+        user.put(f"/api/water/{today}", json={"glasses": target})
+    elif metric == "workout_minutes":
+        user.post("/api/workouts", json={"kind": "walk", "minutes": target})
+    done = user.get("/api/quests/today").json()
+    assert done["done"], done
+    before = user.get("/api/nuggets").json()["balance"]  # points from the activity itself may already have given some
+    claimed = user.post("/api/quests/today/claim").json()
+    assert claimed["claimed"] and claimed["completed_total"] == 1
+    assert user.post("/api/quests/today/claim").status_code == 409
+    assert user.get("/api/nuggets").json()["balance"] == before + 1
+
+
+def test_journal_recording_is_filed_under_its_day_and_counted(user):
+    from datetime import date, timedelta
+    past = date.today() - timedelta(days=3)
+    r = user.post("/api/journal", data={"entry_date": str(past), "audio_seconds": "5"}, files={"audio": ("a.webm", b"\x1aE\xdf\xa3fake", "audio/webm")})
+    assert r.status_code == 200 and r.json()["entry_date"] == str(past) and r.json()["has_audio"] is True
+    user.post("/api/journal", data={"entry_date": str(past), "content": "text too"})
+    user.post("/api/journal", data={"entry_date": str(date.today()), "content": "today"})
+    days = user.get("/api/journal/days", params={"start": str(past - timedelta(days=1)), "end": str(date.today())}).json()
+    assert days == [{"date": str(past), "entries": 2, "recordings": 1}, {"date": str(date.today()), "entries": 1, "recordings": 0}]
+    assert user.get("/api/journal/days", params={"start": "2026-02-01", "end": "2026-01-01"}).status_code == 422
+
+
+def test_profile_photo_is_private_and_validated(user, other):
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 200
+    assert user.get("/api/profile-photo").status_code == 404
+    bad = user.put("/api/profile-photo", files={"file": ("x.png", b"not a png at all", "image/png")})
+    assert bad.status_code == 422
+    assert user.put("/api/profile-photo", files={"file": ("x.gif", png, "image/gif")}).status_code == 422
+    assert user.put("/api/profile-photo", files={"file": ("x.png", b"\x89PNG" + b"0" * 500_000, "image/png")}).status_code == 422
+    assert user.put("/api/profile-photo", files={"file": ("x.png", png, "image/png")}).status_code == 200
+    got = user.get("/api/profile-photo")
+    assert got.status_code == 200 and got.content == png and got.headers["content-type"] == "image/png"
+    assert other.get("/api/profile-photo").status_code == 404  # nobody else can see it
+    assert user.get("/api/account/export").json()["has_profile_photo"] is True
+    assert user.delete("/api/profile-photo").status_code == 200 and user.get("/api/profile-photo").status_code == 404
+
+
+def test_focus_time_per_project(user, other):
+    for title, minutes in [("Thesis", 25), ("thesis ", 25), ("Reading", 15), (None, 25)]:
+        user.post("/api/pomodoro", json={"kind": "work", "duration_minutes": minutes, "title": title})
+    rows = user.get("/api/pomodoro/projects").json()
+    assert [(r["title"].lower(), r["minutes"], r["sessions"]) for r in rows] == [("thesis", 50, 2), ("reading", 15, 1)]
+    assert other.get("/api/pomodoro/projects").json() == []
+
+
+def test_group_members_see_my_photo_only_if_i_share_it(user, other):
+    png = b"\x89PNG\r\n\x1a\n" + b"1" * 100
+    me = user.get("/api/auth/me").json()["id"]
+    user.put("/api/profile-photo", files={"file": ("x.png", png, "image/png")})
+    assert user.get("/api/profile-photo/status").json() == {"has_photo": True, "share_with_groups": False}
+    g = user.post("/api/groups", json={"name": "Crew"}).json()
+    other.post("/api/groups/join", json={"invite_code": g["invite_code"]})
+    board = lambda who: {e["user_id"]: e["has_photo"] for e in who.get(f"/api/groups/{g['id']}").json()["leaderboard"]}
+    assert board(user)[me] is True  # my own is always shown to me
+    assert board(other)[me] is False and other.get(f"/api/profile-photo/user/{me}").status_code == 404  # not shared yet
+    assert user.put("/api/profile-photo/sharing", json={"share": True}).json()["share_with_groups"] is True
+    assert board(other)[me] is True
+    got = other.get(f"/api/profile-photo/user/{me}")
+    assert got.status_code == 200 and got.content == png
+    stranger = other  # someone who shares no group with the owner gets nothing
+    user.delete(f"/api/groups/{g['id']}/members/me")
+    assert stranger.get(f"/api/profile-photo/user/{me}").status_code == 404
+
+
+def test_group_shared_habit_streak_and_cheers(user, other):
+    g = user.post("/api/groups", json={"name": "Crew"}).json()
+    other.post("/api/groups/join", json={"invite_code": g["invite_code"]})
+    base = f"/api/groups/{g['id']}"
+    assert user.post(f"{base}/habits", json={"name": " "}).status_code == 422
+    h = other.post(f"{base}/habits", json={"name": "Walk 20 min"}).json()  # any member may add one
+    assert h["members_total"] == 2 and h["group_streak"] == 0 and not h["all_done_today"]
+    mine = user.post(f"{base}/habits/{h['id']}/check").json()
+    assert mine["me_done"] and mine["done_today"] == 1 and not mine["all_done_today"] and mine["group_streak"] == 0
+    assert user.post(f"{base}/habits/{h['id']}/check").status_code == 409
+    both = other.post(f"{base}/habits/{h['id']}/check").json()
+    assert both["all_done_today"] and both["group_streak"] == 1  # everyone did it today
+    assert user.get(f"{base}/habits").json()[0]["members"][0]["done"] is True
+
+    stranger_id = other.get("/api/auth/me").json()["id"]
+    me_id = user.get("/api/auth/me").json()["id"]
+    assert user.post(f"{base}/cheers", json={"to_user_id": me_id, "emoji": "👏"}).status_code == 422  # not yourself
+    assert user.post(f"{base}/cheers", json={"to_user_id": stranger_id, "emoji": "😈"}).status_code == 422
+    assert user.post(f"{base}/cheers", json={"to_user_id": stranger_id, "emoji": "💪"}).status_code == 200
+    assert user.post(f"{base}/cheers", json={"to_user_id": stranger_id, "emoji": "👏"}).status_code == 409  # one a day
+    got = other.get(f"{base}/cheers").json()
+    assert got["received"] == [{"from": user.get("/api/auth/me").json()["name"], "emoji": "💪"}]
+    assert user.get(f"{base}/cheers").json()["sent_to"] == [stranger_id]
+
+    assert other.delete(f"{base}/habits/{h['id']}").status_code == 200
+    assert user.get(f"{base}/habits").json() == []

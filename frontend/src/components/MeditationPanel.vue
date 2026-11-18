@@ -13,9 +13,9 @@ interface Summary { today_minutes: number; today_sessions: number; total_minutes
 interface Result { points_awarded: number; new_badges: BadgeInfo[] }
 
 type Kind = 'breathing' | 'silent'
-type PatternId = 'box' | 'relax'
+type PatternId = 'box' | 'relax' | 'coherent' | 'calm' | 'triangle'
 // seconds for [breathe in, hold, breathe out, hold]
-const PATTERNS: Record<PatternId, [number, number, number, number]> = { box: [4, 4, 4, 4], relax: [4, 7, 8, 0] }
+const PATTERNS: Record<PatternId, [number, number, number, number]> = { box: [4, 4, 4, 4], relax: [4, 7, 8, 0], coherent: [5, 0, 5, 0], calm: [4, 0, 6, 0], triangle: [4, 4, 4, 0] }
 const PRESETS = [5, 10, 15, 20, 30]
 const PHASES = ['in', 'holdIn', 'out', 'holdOut'] as const
 
@@ -225,6 +225,9 @@ onBeforeUnmount(() => window.clearInterval(timer))
             <select v-model="pattern" class="border rounded-lg px-2 py-1">
               <option value="box">{{ t('meditation.box') }}</option>
               <option value="relax">{{ t('meditation.relax') }}</option>
+              <option value="coherent">{{ t('meditation.coherent') }}</option>
+              <option value="calm">{{ t('meditation.calm') }}</option>
+              <option value="triangle">{{ t('meditation.triangle') }}</option>
             </select>
           </label>
           <label class="flex items-center gap-2 cursor-pointer">

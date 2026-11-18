@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSock
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db, SessionLocal
 from app.infrastructure.security import get_current_user_id, decode_token
-from app.domain.models import Group, GroupMember
+from app.application.services.group_cleanup import drop_group_extras
+from app.domain.models import ProfilePhoto, Group, GroupMember
 from app.application.schemas import (
     GroupCreate, GroupJoin, GroupSummary, GroupDetail, LeaderboardEntry, BadgeInfo,
 )
@@ -127,6 +128,9 @@ def group_detail(
         raise HTTPException(status_code=422, detail="Period must be 'all' or 'week'")
     group = _get_member_group(db, group_id, user_id)
     board = group_leaderboard(db, group.id, period)
+    shown = [u.id for _rank, u, _pts in board]
+    photo_ids = {str(uid) for (uid,) in db.query(ProfilePhoto.user_id).filter(
+        ProfilePhoto.user_id.in_(shown), (ProfilePhoto.share_with_groups.is_(True)) | (ProfilePhoto.user_id == user_id))}
     return GroupDetail(
         id=group.id,
         name=group.name,
@@ -138,6 +142,7 @@ def group_detail(
             LeaderboardEntry(
                 rank=rank, user_id=user.id, name=user.name, points=pts,
                 is_me=str(user.id) == str(user_id),
+                has_photo=str(user.id) in photo_ids,
             )
             for rank, user, pts in board
         ],
@@ -172,6 +177,7 @@ def delete_group(group_id: UUID, user_id: str = Depends(get_current_user_id), db
     if str(group.owner_id) != str(user_id):
         raise HTTPException(status_code=403, detail="Only the owner can delete the group")
     group_id = group.id
+    drop_group_extras(db, group_id)
     db.delete(group)
     db.commit()
     notify_groups([group_id], "group_deleted")

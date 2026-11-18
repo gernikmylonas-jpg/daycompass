@@ -153,6 +153,25 @@ def _own(db: Session, entry_id: UUID, user_id: str) -> JournalEntry:
     return entry
 
 
+@router.get("/days")
+def journal_days(start: date, end: date, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    """For a calendar: per day, how many entries and how many voice recordings exist. Counts only, never the content."""
+    if end < start or (end - start).days > 366:
+        raise HTTPException(status_code=422, detail="End date must not be before start date")
+    rows = (
+        db.query(JournalEntry.entry_date, JournalEntry.id, JournalAudio.entry_id)
+        .outerjoin(JournalAudio, JournalAudio.entry_id == JournalEntry.id)
+        .filter(JournalEntry.user_id == user_id, JournalEntry.entry_date.between(start, end))
+        .all()
+    )
+    days: dict = {}
+    for d, _eid, audio_id in rows:
+        item = days.setdefault(d, {"date": d, "entries": 0, "recordings": 0})
+        item["entries"] += 1
+        item["recordings"] += 1 if audio_id is not None else 0
+    return sorted(days.values(), key=lambda x: x["date"])
+
+
 @router.get("", response_model=JournalPage)
 def list_entries(
     limit: int = Query(20, ge=1, le=100),

@@ -7,6 +7,9 @@ import { apiErrorMessage } from '../i18n/errors'
 import BadgesPanel from '../components/BadgesPanel.vue'
 import BadgeToast from '../components/BadgeToast.vue'
 import UserChip from '../components/UserChip.vue'
+import WallpaperShop from '../components/WallpaperShop.vue'
+import GoalsSection from '../components/GoalsSection.vue'
+import DailyQuest from '../components/DailyQuest.vue'
 import { useStreakStore } from '../stores/streak'
 
 interface Source {
@@ -96,6 +99,16 @@ onMounted(async () => {
       <RouterLink to="/report" class="block bg-surface rounded-xl shadow p-4 text-center font-medium text-slate-800 hover:bg-slate-50 border-t-4 border-teal-500">
         📊 {{ t('report.open') }}
       </RouterLink>
+
+      <DailyQuest />
+
+      <GoalsSection />
+
+      <RouterLink to="/review" class="block bg-surface rounded-xl shadow p-4 text-center font-medium text-slate-800 hover:bg-slate-50 border-t-4 border-amber-500">
+        🎞 {{ t('review.open') }}
+      </RouterLink>
+
+      <WallpaperShop />
 
       <BadgesPanel />
     </div>

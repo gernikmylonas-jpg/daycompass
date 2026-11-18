@@ -34,12 +34,16 @@ const MOOD_KEY = 'moodStyle'
 const DEPTH_KEY = 'depth3d'
 const BRIGHT_KEY = 'brightness'
 const LID_KEY = 'lid'
+const QUESTS_KEY = 'quests'
+const WALL_ON_KEY = 'wallpapersOn'
+const WALL_KEY = 'wallpaper'
 export interface CalendarLayers {
   holidays: boolean // public holidays of `country`
   country: string // ISO code, e.g. GR
   nameDays: boolean // Greek Orthodox name days
   history: boolean // moments from world history and fun facts
   national: boolean // national days of all countries
+  journal: boolean // days that have journal entries / recordings
 }
 const LAYERS_KEY = 'calendarLayers'
 const defaultCountry = () => {
@@ -73,7 +77,7 @@ function write(key: string, value: string) {
 }
 
 function parseLayers(raw: string | null | undefined): CalendarLayers {
-  const base: CalendarLayers = { holidays: false, country: defaultCountry(), nameDays: false, history: false, national: false }
+  const base: CalendarLayers = { holidays: false, country: defaultCountry(), nameDays: false, history: false, national: false, journal: false }
   if (!raw) return base
   try {
     const v = JSON.parse(raw)
@@ -83,6 +87,7 @@ function parseLayers(raw: string | null | undefined): CalendarLayers {
       nameDays: v.nameDays === true,
       history: v.history === true,
       national: v.national === true,
+      journal: v.journal === true,
     }
   } catch {
     return base
@@ -97,6 +102,9 @@ interface ServerSettings {
   mood_style?: string
   depth_3d?: boolean
   lid_open?: boolean
+  wallpaper?: string | null
+  wallpapers_on?: boolean
+  quests_on?: boolean
   calendar_prefs?: string | null
   brightness?: number
   saved: boolean
@@ -117,6 +125,9 @@ export const useSettingsStore = defineStore('settings', () => {
 
   const calendarLayers = ref<CalendarLayers>(parseLayers(read(LAYERS_KEY)))
   const depth3d = ref(read(DEPTH_KEY) === 'on')
+  const questsOn = ref(read(QUESTS_KEY) === 'on')
+  const wallpapersOn = ref(read(WALL_ON_KEY) === 'on')
+  const wallpaper = ref<string | null>(read(WALL_KEY))
   const lidAnimation = ref(read(LID_KEY) === 'on')
   const storedBright = Number(read(BRIGHT_KEY))
   const brightness = ref(storedBright >= BRIGHTNESS_MIN && storedBright <= BRIGHTNESS_MAX ? storedBright : 100)
@@ -131,6 +142,7 @@ export const useSettingsStore = defineStore('settings', () => {
   function apply() {
     document.documentElement.dataset.theme = theme.value
     document.documentElement.dataset.mode = resolvedMode.value
+    document.documentElement.dataset.wallpaper = wallpapersOn.value && wallpaper.value ? 'on' : 'off'
     document.documentElement.dataset.depth = depth3d.value ? '3d' : 'flat'
     document.documentElement.style.setProperty('--lamp', String(brightness.value / 100))
   }
@@ -152,6 +164,9 @@ export const useSettingsStore = defineStore('settings', () => {
         mood_style: moodStyle.value,
         depth_3d: depth3d.value,
         lid_open: lidAnimation.value,
+        wallpaper: wallpaper.value,
+        wallpapers_on: wallpapersOn.value,
+        quests_on: questsOn.value,
         calendar_prefs: JSON.stringify(calendarLayers.value),
         brightness: brightness.value,
       })
@@ -181,6 +196,9 @@ export const useSettingsStore = defineStore('settings', () => {
       needleCursor.value = data.needle_cursor
       if (isMoodStyle(data.mood_style)) moodStyle.value = data.mood_style
       if (data.calendar_prefs) Object.assign(calendarLayers.value, parseLayers(data.calendar_prefs))
+      if (typeof data.quests_on === 'boolean') questsOn.value = data.quests_on
+      if (typeof data.wallpapers_on === 'boolean') wallpapersOn.value = data.wallpapers_on
+      wallpaper.value = data.wallpaper ?? null
       if (typeof data.lid_open === 'boolean') lidAnimation.value = data.lid_open
       if (typeof data.depth_3d === 'boolean') depth3d.value = data.depth_3d
       if (typeof data.brightness === 'number' && data.brightness >= BRIGHTNESS_MIN && data.brightness <= BRIGHTNESS_MAX) brightness.value = data.brightness
@@ -224,6 +242,16 @@ export const useSettingsStore = defineStore('settings', () => {
     write(LAYERS_KEY, JSON.stringify(value))
     scheduleSave()
   }, { deep: true })
+  watch([wallpapersOn, wallpaper], ([on, id]) => {
+    apply()
+    write(WALL_ON_KEY, on ? 'on' : 'off')
+    write(WALL_KEY, id ?? '')
+    scheduleSave()
+  })
+  watch(questsOn, (value) => {
+    write(QUESTS_KEY, value ? 'on' : 'off')
+    scheduleSave()
+  })
   watch(lidAnimation, (value) => {
     write(LID_KEY, value ? 'on' : 'off')
     scheduleSave()
@@ -246,5 +274,5 @@ export const useSettingsStore = defineStore('settings', () => {
     moodStyle.value = value
   }
 
-  return { theme, mode, resolvedMode, needleCursor, moodStyle, depth3d, brightness, lidAnimation, calendarLayers, syncError, setTheme, setMode, setMoodStyle, loadFromServer }
+  return { theme, mode, resolvedMode, needleCursor, moodStyle, depth3d, brightness, lidAnimation, wallpapersOn, wallpaper, questsOn, calendarLayers, syncError, setTheme, setMode, setMoodStyle, loadFromServer }
 })

@@ -220,7 +220,9 @@ function revoke(id: string) {
   audioUrls.value = rest
 }
 
+const freshDay = () => { date.value = toIso(new Date()) } // the form never keeps yesterday's date after midnight
 onMounted(async () => {
+  freshDay()
   try {
     await lock.refresh()
   } catch (e) {
@@ -258,6 +260,7 @@ onBeforeUnmount(() => {
         <h3 class="font-bold text-slate-800">{{ t('journal.newEntry') }}</h3>
         <DateField v-model="date" min="2000-01-01" :max="today" :label="t('wellness.date')" required />
       </div>
+      <p class="text-xs text-slate-500">{{ t('journal.savesOn', { date: formatDate(date) }) }}</p>
 
       <div role="radiogroup" :aria-label="t('journal.mood')" class="flex items-center gap-2">
         <span class="text-xs text-slate-500">{{ t('journal.mood') }}</span>

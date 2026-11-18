@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
-from app.domain.models import UserSettings
+from app.domain.models import UserSettings, WallpaperUnlock
 from app.application.schemas import SettingsPayload, SettingsResponse
 from app.application.services.reminders import LANGUAGES
 
@@ -22,7 +22,7 @@ def get_settings(user_id: str = Depends(get_current_user_id), db: Session = Depe
         return SettingsResponse(**DEFAULTS.model_dump(), saved=False)
     return SettingsResponse(
         theme=row.theme, mode=row.mode, needle_cursor=row.needle_cursor, language=row.language,
-        mood_style=row.mood_style, depth_3d=row.depth_3d, lid_open=row.lid_open, calendar_prefs=row.calendar_prefs, brightness=row.brightness, saved=True,
+        mood_style=row.mood_style, depth_3d=row.depth_3d, lid_open=row.lid_open, calendar_prefs=row.calendar_prefs, wallpaper=row.wallpaper, wallpapers_on=row.wallpapers_on, quests_on=row.quests_on, brightness=row.brightness, saved=True,
     )
 
 
@@ -42,6 +42,10 @@ def put_settings(
         raise HTTPException(status_code=422, detail="Invalid mood style")
     if payload.calendar_prefs is not None and len(payload.calendar_prefs) > 2000:
         raise HTTPException(status_code=422, detail="Invalid calendar preferences")
+    if payload.wallpaper is not None and not db.query(WallpaperUnlock).filter(
+        WallpaperUnlock.user_id == user_id, WallpaperUnlock.wallpaper_id == payload.wallpaper
+    ).first():
+        raise HTTPException(status_code=422, detail="Wallpaper is not unlocked")
     if not 50 <= payload.brightness <= 150:
         raise HTTPException(status_code=422, detail="Invalid brightness")
 
@@ -57,6 +61,9 @@ def put_settings(
     row.depth_3d = payload.depth_3d
     row.lid_open = payload.lid_open
     row.calendar_prefs = payload.calendar_prefs
+    row.wallpaper = payload.wallpaper
+    row.wallpapers_on = payload.wallpapers_on
+    row.quests_on = payload.quests_on
     row.brightness = payload.brightness
     row.updated_at = datetime.utcnow()
     db.commit()

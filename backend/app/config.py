@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
     mail_from: str = "DayCompass <no-reply@daycompass.local>"
     app_url: str = "http://localhost:5173"
+    # Browsers allowed to call the API from another address (comma-separated). Not needed when a reverse proxy
+    # serves the site and /api from the same address.
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     class Config:
         env_file = ".env"

@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { THEMES, MODES, BRIGHTNESS_MIN, BRIGHTNESS_MAX, useSettingsStore } from '../stores/settings'
 import { radioKeydown } from '../a11y'
+import { RouterLink } from 'vue-router'
+import { useNuggetsStore } from '../stores/nuggets'
+import { offlineEnabled, offlineSupported, setOffline } from '../offline'
 
 const { t } = useI18n()
 const settings = useSettingsStore()
+const nuggets = useNuggetsStore()
+const offlineOn = ref(offlineEnabled())
+const canOffline = offlineSupported()
+async function toggleOffline() { await setOffline(offlineOn.value) }
+const unlockedWallpapers = computed(() => nuggets.data?.unlocked ?? [])
 
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
@@ -19,6 +27,7 @@ function close(restoreFocus: boolean) {
 // move keyboard focus into the panel, onto the current style
 watch(open, async (isOpen) => {
   if (!isOpen) return
+  nuggets.fetch()
   await nextTick()
   root.value?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus()
 })
@@ -96,6 +105,33 @@ onUnmounted(() => {
           <span>
             <span class="block text-sm font-medium text-slate-800">{{ t('settings.depth') }}</span>
             <span class="block text-xs text-slate-500">{{ t('settings.depthHint') }}</span>
+          </span>
+        </label>
+        <div class="space-y-1">
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input v-model="settings.wallpapersOn" type="checkbox" class="mt-1 h-4 w-4" />
+            <span>
+              <span class="block text-sm font-medium text-slate-800">{{ t('settings.wallpapers') }}</span>
+              <span class="block text-xs text-slate-500">{{ t('settings.wallpapersHint') }}</span>
+            </span>
+          </label>
+          <select v-if="unlockedWallpapers.length" v-model="settings.wallpaper" :aria-label="t('settings.wallpapers')" class="w-full border rounded-lg px-2 py-1.5 text-sm">
+            <option v-for="u in unlockedWallpapers" :key="u.id" :value="u.id">{{ t(`wallpapers.${u.id}.name`) }}</option>
+          </select>
+          <RouterLink to="/progress#wallpapers" @click="open = false" class="text-xs underline text-slate-700">{{ t('settings.wallpaperShop') }}</RouterLink>
+        </div>
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input v-model="settings.questsOn" type="checkbox" class="mt-1 h-4 w-4" />
+          <span>
+            <span class="block text-sm font-medium text-slate-800">{{ t('settings.quests') }}</span>
+            <span class="block text-xs text-slate-500">{{ t('settings.questsHint') }}</span>
+          </span>
+        </label>
+        <label v-if="canOffline" class="flex items-start gap-3 cursor-pointer">
+          <input v-model="offlineOn" type="checkbox" class="mt-1 h-4 w-4" @change="toggleOffline" />
+          <span>
+            <span class="block text-sm font-medium text-slate-800">{{ t('settings.offline') }}</span>
+            <span class="block text-xs text-slate-500">{{ t('settings.offlineHint') }}</span>
           </span>
         </label>
         <label class="flex items-start gap-3 cursor-pointer">

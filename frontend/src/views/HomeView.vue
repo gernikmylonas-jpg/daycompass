@@ -17,6 +17,9 @@ import GroupsPanel from '../components/GroupsPanel.vue'
 import CalendarPanel from '../components/CalendarPanel.vue'
 import WellnessPanel from '../components/WellnessPanel.vue'
 import WeightPanel from '../components/WeightPanel.vue'
+import WaterPanel from '../components/WaterPanel.vue'
+import WorkoutPanel from '../components/WorkoutPanel.vue'
+import GratitudePanel from '../components/GratitudePanel.vue'
 import AstronomyPanel from '../components/AstronomyPanel.vue'
 import JournalPanel from '../components/JournalPanel.vue'
 import MoodPanel from '../components/MoodPanel.vue'
@@ -156,19 +159,22 @@ const panelTitleEl = ref<HTMLElement | null>(null)
 const medallionEls: Partial<Record<DirId, HTMLElement>> = {}
 
 // An extra option inside a direction's card (like steps & sleep in the north)
-type ExtraKey = 'wellness' | 'weight' | 'astronomy' | 'journal' | 'mood' | 'meditation'
+type ExtraKey = 'wellness' | 'weight' | 'water' | 'workouts' | 'gratitude' | 'astronomy' | 'journal' | 'mood' | 'meditation'
 const openExtra = ref<ExtraKey | null>(null)
 const extras = computed<{ key: ExtraKey; icon: string; label: string }[]>(() => {
   switch (openDirection.value?.id) {
     case 'n': return [
       { key: 'wellness', icon: '👟', label: t('home.stepsHistory') },
       { key: 'weight', icon: '⚖️', label: t('home.weightOption') },
+      { key: 'water', icon: '💧', label: t('home.waterOption') },
+      { key: 'workouts', icon: '🏃', label: t('home.workoutOption') },
     ]
     case 'e': return [{ key: 'astronomy', icon: '🌙', label: t('home.astronomyOption') }]
     case 's': return [
       { key: 'journal', icon: '📓', label: t('home.journalOption') },
       { key: 'mood', icon: '🙂', label: t('home.moodOption') },
       { key: 'meditation', icon: '🧘', label: t('home.meditationOption') },
+      { key: 'gratitude', icon: '🙏', label: t('home.gratitudeOption') },
     ]
     default: return []
   }
@@ -641,6 +647,9 @@ onBeforeUnmount(() => {
 
             <WellnessPanel v-if="openExtra === 'wellness'" :parts="['steps']" />
             <WeightPanel v-if="openExtra === 'weight'" />
+            <WaterPanel v-if="openExtra === 'water'" />
+            <WorkoutPanel v-if="openExtra === 'workouts'" />
+            <GratitudePanel v-if="openExtra === 'gratitude'" />
             <WellnessPanel v-if="openDirection.kind === 'sleep'" :parts="['sleep']" @saved="loadSleepToday" />
             <AstronomyPanel v-if="openExtra === 'astronomy'" />
             <JournalPanel v-if="openExtra === 'journal'" />

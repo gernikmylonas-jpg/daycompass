@@ -15,6 +15,70 @@ const badges = useBadgesStore()
 const streak = useStreakStore()
 const router = useRouter()
 
+// the profile picture lives only on this page: no one else sees it and no other screen shows it
+const photoUrl = ref<string | null>(null)
+const photoInput = ref<HTMLInputElement | null>(null)
+const shareWithGroups = ref(false)
+async function loadSharing() {
+  try {
+    shareWithGroups.value = (await api.get<{ share_with_groups: boolean }>('/api/profile-photo/status')).data.share_with_groups
+  } catch {
+    shareWithGroups.value = false
+  }
+}
+async function setSharing() {
+  error.value = ''
+  try {
+    await api.put('/api/profile-photo/sharing', { share: shareWithGroups.value })
+  } catch (e) {
+    shareWithGroups.value = !shareWithGroups.value
+    error.value = apiErrorMessage(e)
+  }
+}
+async function loadPhoto() {
+  try {
+    const { data } = await api.get<Blob>('/api/profile-photo', { responseType: 'blob' })
+    if (photoUrl.value) URL.revokeObjectURL(photoUrl.value)
+    photoUrl.value = URL.createObjectURL(data)
+  } catch {
+    photoUrl.value = null
+  }
+}
+// shrink to a 256 px square JPEG in the browser, so uploads stay small
+async function squareJpeg(file: File): Promise<Blob> {
+  const bmp = await createImageBitmap(file)
+  const size = Math.min(bmp.width, bmp.height)
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = 256
+  canvas.getContext('2d')!.drawImage(bmp, (bmp.width - size) / 2, (bmp.height - size) / 2, size, size, 0, 0, 256, 256)
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('image'))), 'image/jpeg', 0.85))
+}
+async function onPhoto(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  error.value = message.value = ''
+  try {
+    const form = new FormData()
+    form.append('file', await squareJpeg(file), 'photo.jpg')
+    await api.put('/api/profile-photo', form)
+    await loadPhoto()
+    message.value = t('profile.saved')
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  }
+}
+async function removePhoto() {
+  try {
+    await api.delete('/api/profile-photo')
+    photoUrl.value = null
+    shareWithGroups.value = false
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  }
+}
+
 const name = ref(auth.user?.name ?? '')
 const newEmail = ref('')
 const emailPassword = ref('')
@@ -111,6 +175,8 @@ function logout() {
 }
 
 onMounted(async () => {
+  loadPhoto()
+  loadSharing()
   await Promise.all([auth.refreshUser().catch(() => {}), badges.fetchBadges().catch(() => {}), streak.fetch()])
   name.value = auth.user?.name ?? ''
 })
@@ -131,6 +197,26 @@ onMounted(async () => {
       <p v-if="message" role="status" class="text-ok text-sm font-medium">{{ message }}</p>
 
       <!-- at a glance -->
+      <section class="bg-surface rounded-xl shadow p-4 flex items-center gap-4">
+        <div class="w-20 h-20 rounded-full overflow-hidden bg-slate-100 border border-slate-300 flex items-center justify-center shrink-0">
+          <img v-if="photoUrl" :src="photoUrl" :alt="t('profile.photo.alt')" class="w-full h-full object-cover" />
+          <span v-else class="text-3xl text-slate-400" aria-hidden="true">👤</span>
+        </div>
+        <div class="space-y-1">
+          <p class="text-sm font-medium text-slate-800">{{ t('profile.photo.title') }}</p>
+          <p class="text-xs text-slate-500">{{ t(shareWithGroups ? 'profile.photo.hintShared' : 'profile.photo.hint') }}</p>
+          <div class="flex gap-2">
+            <button type="button" @click="photoInput?.click()" class="border border-slate-400 text-slate-700 rounded-lg px-3 py-1 text-sm hover:bg-slate-50">{{ photoUrl ? t('profile.photo.change') : t('profile.photo.add') }}</button>
+            <button v-if="photoUrl" type="button" @click="removePhoto" class="border border-slate-400 text-slate-600 rounded-lg px-3 py-1 text-sm hover:bg-slate-50">{{ t('profile.photo.remove') }}</button>
+          </div>
+          <label v-if="photoUrl" class="flex items-start gap-2 text-sm text-slate-700 pt-1">
+            <input v-model="shareWithGroups" type="checkbox" class="mt-1 h-4 w-4" @change="setSharing" />
+            <span>{{ t('profile.photo.share') }}<span class="block text-xs text-slate-500">{{ t('profile.photo.shareHint') }}</span></span>
+          </label>
+          <input ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="onPhoto" />
+        </div>
+      </section>
+
       <section class="grid grid-cols-3 gap-3 text-center">
         <RouterLink to="/progress" class="bg-surface rounded-xl shadow p-3 hover:bg-slate-50">
           <p class="text-2xl font-bold text-slate-800 tabular-nums">{{ auth.user?.total_points ?? 0 }}</p>

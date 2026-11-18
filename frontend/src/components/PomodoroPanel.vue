@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FocusSounds from './FocusSounds.vue'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '../api'
@@ -36,6 +37,7 @@ const phase = ref<'work' | 'break'>('work')
 const running = ref(false)
 const remaining = ref(workMinutes.value * 60)
 const summary = ref<Summary | null>(null)
+const projects = ref<{ title: string; minutes: number; sessions: number }[]>([])
 const error = ref('')
 
 let endAt = 0
@@ -62,6 +64,7 @@ async function loadSummary() {
     const { data } = await api.get<Summary>('/api/pomodoro/summary')
     summary.value = data
     emit('summary', data.today_sessions)
+    projects.value = (await api.get('/api/pomodoro/projects')).data
   } catch (e) {
     showError(e)
   }
@@ -170,7 +173,8 @@ onUnmounted(stopTimer)
       </div>
 
       <input v-model="title" :disabled="running && phase === 'work'" type="text" maxlength="100"
-        :placeholder="t('pomodoro.titlePlaceholder')" :aria-label="t('pomodoro.titlePlaceholder')" class="border rounded-lg px-3 py-2 text-sm w-full max-w-sm" />
+        :placeholder="t('pomodoro.titlePlaceholder')" :aria-label="t('pomodoro.titlePlaceholder')" class="border rounded-lg px-3 py-2 text-sm w-full max-w-sm" list="focus-projects" />
+      <datalist id="focus-projects"><option v-for="p in projects" :key="p.title" :value="p.title" /></datalist>
 
       <div class="flex flex-wrap justify-center gap-4 text-sm text-slate-600 pt-2">
         <label class="flex items-center gap-2">
@@ -221,5 +225,13 @@ onUnmounted(stopTimer)
       </ul>
       <p v-else class="text-slate-500 text-sm">{{ t('pomodoro.noSessions') }}</p>
     </section>
+    <section v-if="projects.length" class="bg-surface rounded-xl shadow p-4 space-y-2">
+      <h2 class="font-bold text-slate-800">{{ t('pomodoro.byProject') }}</h2>
+      <div v-for="p in projects.slice(0, 8)" :key="p.title" class="text-sm">
+        <div class="flex justify-between text-slate-700"><span class="break-words">{{ p.title }}</span><span class="tabular-nums shrink-0">{{ t('wellness.duration', { h: Math.floor(p.minutes / 60), m: p.minutes % 60 }) }} · {{ t('pomodoro.sessions', p.sessions) }}</span></div>
+        <div class="h-1.5 rounded bg-slate-100 overflow-hidden"><div class="h-full bg-orange-500" :style="{ width: (p.minutes / projects[0].minutes) * 100 + '%' }"></div></div>
+      </div>
+    </section>
+    <FocusSounds />
   </div>
 </template>

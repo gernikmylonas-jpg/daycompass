@@ -7,6 +7,7 @@ import GroupsView from '../views/GroupsView.vue'
 import WellnessView from '../views/WellnessView.vue'
 import ProgressView from '../views/ProgressView.vue'
 import ReportView from '../views/ReportView.vue'
+import ReviewView from '../views/ReviewView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
@@ -21,6 +22,7 @@ const router = createRouter({
     { path: '/wellness', component: WellnessView, meta: { requiresAuth: true } },
     { path: '/progress', component: ProgressView, meta: { requiresAuth: true } },
     { path: '/report', component: ReportView, meta: { requiresAuth: true } },
+    { path: '/review', component: ReviewView, meta: { requiresAuth: true } },
     { path: '/profile', component: ProfileView, meta: { requiresAuth: true } },
     { path: '/login', component: LoginView },
     { path: '/register', component: RegisterView },

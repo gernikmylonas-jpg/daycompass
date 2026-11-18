@@ -8,6 +8,7 @@ import {
   sunTimes, moonAltitudeAtLunarEclipse, type Eclipse, type PhaseEvent, type Place,
 } from '../astronomy'
 import MoonIcon from './MoonIcon.vue'
+import { skyEventsForYear, planetsNow, type SkyEvent, type PlanetId } from '../planets'
 
 // Moon phases, eclipses and sky events for any year from 2000 to 2100, computed on the device.
 
@@ -69,6 +70,7 @@ const eventsByDay = computed(() => {
   for (const e of monthEclipses.value) {
     add(e.date.getDate(), { icon: e.kind === 'solar' ? '☉' : '☽', label: eclipseLabel(e), at: e.date })
   }
+  for (const e of planetEvents.value) if (inThisMonth(e.date)) add(e.date.getDate(), { icon: skyIcon(e), label: skyLabel(e), at: e.date })
   return map
 })
 
@@ -117,6 +119,24 @@ const nextEclipse = computed(() => {
 function eclipseLabel(e: Eclipse) {
   return `${t(`astro.eclipse.${e.kind}`)} · ${t(`astro.eclipse.${e.type}`)}`
 }
+
+// ── planets and the Earth's orbit ────────────────────────────────────────
+const planetEvents = computed(() => skyEventsForYear(year.value))
+const planetName = (id: PlanetId) => t(`astro.sky.planets.${id}`)
+function skyLabel(e: SkyEvent): string {
+  const [a, b] = e.planets
+  switch (e.kind) {
+    case 'opposition': return t('astro.sky.opposition', { planet: planetName(a) })
+    case 'greatestElongation': return t(`astro.sky.elongation.${e.side}`, { planet: planetName(a), deg: Math.round(e.degrees ?? 0) })
+    case 'conjunctionSun': return t(`astro.sky.sunConj.${e.inferior ? 'inferior' : 'superior'}`, { planet: planetName(a) })
+    case 'conjunction': return t('astro.sky.conjunction', { a: planetName(a), b: planetName(b), deg: (e.degrees ?? 0).toFixed(1) })
+    default: return t(`astro.sky.${e.kind}`)
+  }
+}
+const skyIcon = (e: SkyEvent) => (e.kind === 'perihelion' || e.kind === 'aphelion' ? '🌍' : '✦')
+const tonight = computed(() => planetsNow(now))
+// a gentle, optional idea tied to the moon's phase (shown only here, only when you open this panel)
+const moonTip = computed(() => (moonNow.value.name === 'new' ? 'new' : moonNow.value.name === 'full' ? 'full' : null))
 
 // ── sky events ───────────────────────────────────────────────────────────
 const seasons = computed(() => seasonsForYear(year.value))
@@ -206,6 +226,7 @@ const lunarVisible = (e: Eclipse): boolean | null =>
         <p class="text-sm text-slate-600">
           {{ t('astro.illumination', { n: percent(moonNow.illumination) }) }} · {{ t('astro.age', { n: moonNow.ageDays.toFixed(1) }) }}
         </p>
+        <p v-if="moonTip" class="text-xs text-slate-700 mt-1">🌱 {{ t(`astro.tip.${moonTip}`) }}</p>
         <p class="text-xs text-slate-500 mt-1">
           {{ t('astro.nextNew') }}: {{ formatDateTime(nextNew.date) }}<br />
           {{ t('astro.nextFull') }}: {{ formatDateTime(nextFull.date) }}
@@ -340,6 +361,26 @@ const lunarVisible = (e: Eclipse): boolean | null =>
               <span class="text-slate-600 tabular-nums">{{ formatDateTime(s.date) }}</span>
             </li>
           </ul>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-800 mb-1">{{ t('astro.sky.planetsTitle', { year }) }}</h3>
+          <ul v-if="planetEvents.length" class="divide-y text-sm">
+            <li v-for="(e, i) in planetEvents" :key="i" class="py-1.5 flex justify-between gap-3">
+              <span class="text-slate-700"><span aria-hidden="true">{{ skyIcon(e) }}</span> {{ skyLabel(e) }}</span>
+              <span class="text-slate-600 tabular-nums shrink-0">{{ formatDate(e.date) }}</span>
+            </li>
+          </ul>
+          <p class="text-xs text-slate-500 mt-1">{{ t('astro.sky.planetsNote') }}</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-800 mb-1">{{ t('astro.sky.tonightTitle') }}</h3>
+          <ul class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 text-sm">
+            <li v-for="p in tonight" :key="p.planet" class="py-1 flex justify-between gap-3">
+              <span class="text-slate-700">{{ planetName(p.planet) }}</span>
+              <span class="text-slate-600">{{ t(`astro.sky.position.${p.position}`) }} · {{ Math.abs(p.elongation) }}°</span>
+            </li>
+          </ul>
+          <p class="text-xs text-slate-500 mt-1">{{ t('astro.sky.tonightNote') }}</p>
         </div>
         <div>
           <h3 class="font-semibold text-slate-800 mb-1">{{ t('astro.sky.showersTitle') }}</h3>

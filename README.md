@@ -102,6 +102,24 @@ In the calendar, switch on any of: **public holidays** of a country (computed by
 - **Steps**: a progress ring for the chosen day (goal 8,000; a second lap after the goal), quick-add buttons (+500 … +5,000), a goal streak and a bar chart for 7 days / 30 days / 12 months (`/api/wellness/steps/series`).
 - **Weight**: one reading a day, a 7-day trend line (single readings are noisy), optional goal, height and BMI (off by default), kg or lb. It awards no points for a result, only badges for logging; a gentle note appears if the trend falls faster than ~1.5% of body weight a week.
 
+## Gold nuggets and wallpapers
+
+Every 10 points earned = 1 gold nugget (`POINTS_PER_NUGGET`). Nuggets buy wallpapers on the points page; points are never reduced, and every purchase is stored (`wallpaper_unlocks`) so the history is always there. Wallpapers are drawn in code (`frontend/src/wallpapers/art.ts`) and are optional: *Settings → Wallpapers* switches them on/off and picks one you own. To add one: catalog entry in `backend/app/application/services/wallpapers.py`, a function in `art.ts`, texts in the four locale files (a test checks all three).
+
+## Running it from anywhere, desktop icon
+
+See `DEPLOY.md` (one small server with `docker compose --profile full up -d --build`, a home server plus a tunnel, or managed services). `scripts/create-desktop-shortcut.ps1` puts a DayCompass icon on your Desktop that starts everything locally and opens the app. In a production build the app is installable (browser menu: *Install*). Offline mode is opt-in in Settings.
+
+**Nothing happens unless you choose it:** reminders and e-mails, lid, 3D, wallpapers, extra calendars, BMI, goals, offline mode and location are all off until you switch them on.
+
+## More trackers (all opt-in, all yours alone)
+
+North: water (glasses), workouts. South: gratitude. West: focus sounds (generated in the browser). Calendar: import/export `.ics`, a *Journal days* layer that marks days that have entries or voice recordings (counts only). Profile: a picture shown only on the profile page and never served to anyone else. *Settings → Daily quest* shows one small challenge a day worth an extra nugget.
+
+## Planets, groups, small extras
+
+*Moon & eclipses → Sky events* also lists planetary oppositions, greatest elongations, conjunctions with the Sun and between planets, and the Earth's perihelion/aphelion (`frontend/src/planets.ts`, from JPL's approximate Keplerian elements; about a day of accuracy up to 2050), plus which planets are in the evening or morning sky today. Groups have shared habits with a group streak (everyone must do it), one-emoji cheers, and optional profile pictures (a member's picture is shown to their groups only if they switch it on in their profile). Focus time is totalled per session title, and the breathing exercises have more patterns.
+
 ## Tests and CI
 
 `cd backend && pip install -r requirements-dev.txt && pytest` (needs the Postgres from docker compose; uses its own `daycompass_test` database). `cd frontend && npm test`. GitHub Actions (`.github/workflows/ci.yml`) runs both, plus `vue-tsc` and the build.

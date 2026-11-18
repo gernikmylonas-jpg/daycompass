@@ -7,6 +7,7 @@ import { useSettingsStore } from './stores/settings'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import SettingsMenu from './components/SettingsMenu.vue'
 import NeedleCursor from './components/NeedleCursor.vue'
+import WallpaperLayer from './components/WallpaperLayer.vue'
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -24,6 +25,7 @@ watch(() => auth.token, (token) => { if (token) settings.loadFromServer() }, { i
 
 <template>
   <div class="bg-page min-h-screen">
+    <WallpaperLayer />
     <a href="#main" class="skip-link">{{ t('a11y.skip') }}</a>
     <p v-if="!online" role="status" class="bg-surface border-b border-slate-400 text-slate-700 text-sm text-center px-4 py-1">📡 {{ t('common.offline') }}</p>
     <div class="h-12 px-4 md:px-8 flex items-center justify-between">

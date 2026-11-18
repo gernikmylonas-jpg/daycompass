@@ -1,6 +1,6 @@
 from datetime import date
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
@@ -56,6 +56,29 @@ def list_events(
     if (end - start).days + 1 > MAX_RANGE_DAYS:
         raise HTTPException(status_code=422, detail=f"Range is limited to {MAX_RANGE_DAYS} days")
     return [_to_response(e, day) for e, day in occurrences_between(db, user_id, start, end)]
+
+
+def _ics_text(value: str) -> str:
+    return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+
+@router.get("/ics")
+def export_ics(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    """All calendar notes as an .ics file that other calendar apps can import (yearly/weekly repeats included)."""
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//DayCompass//EN", "CALSCALE:GREGORIAN"]
+    for e in db.query(CalendarEvent).filter(CalendarEvent.user_id == user_id).order_by(CalendarEvent.event_date):
+        lines += ["BEGIN:VEVENT", f"UID:{e.id}@daycompass", f"DTSTAMP:{e.created_at.strftime('%Y%m%dT%H%M%SZ')}",
+                  f"DTSTART;VALUE=DATE:{e.event_date.strftime('%Y%m%d')}", f"SUMMARY:{_ics_text(e.title)}"]
+        if e.notes:
+            lines.append(f"DESCRIPTION:{_ics_text(e.notes)}")
+        if e.repeat_yearly:
+            lines.append("RRULE:FREQ=YEARLY")
+        elif e.repeat_weekly:
+            lines.append("RRULE:FREQ=WEEKLY")
+        lines.append("END:VEVENT")
+    lines.append("END:VCALENDAR")
+    return Response("\r\n".join(lines) + "\r\n", media_type="text/calendar",
+                    headers={"Content-Disposition": 'attachment; filename="daycompass.ics"'})
 
 
 @router.post("", response_model=EventResponse)

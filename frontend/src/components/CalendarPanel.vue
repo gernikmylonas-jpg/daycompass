@@ -35,6 +35,7 @@ interface CalEvent {
 import { useSettingsStore } from '../stores/settings'
 import { namesOn } from '../calendars/nameDays'
 import { historyOn, formatYear } from '../calendars/history'
+import { parseIcs } from '../calendars/ics'
 import { nationalDaysOn, flagOf } from '../calendars/nationalDays'
 
 const MIN_YEAR = 2000
@@ -158,6 +159,7 @@ const LAYER_DEFS = [
   { key: 'nameDays', icon: '✝' },
   { key: 'national', icon: '🏳' },
   { key: 'history', icon: '📜' },
+  { key: 'journal', icon: '📓' },
 ] as const
 
 const regionNames = computed(() => new Intl.DisplayNames([loc.value], { type: 'region' }))
@@ -199,6 +201,18 @@ const holidaysByDate = computed(() => {
 const nameDaysFor = (d: string) => (layers.nameDays ? namesOn(parse(d)) : [])
 const historyFor = (d: string) => (layers.history ? historyOn(Number(d.slice(5, 7)), Number(d.slice(8, 10))) : [])
 const nationalFor = (d: string) => (layers.national ? nationalDaysOn(Number(d.slice(5, 7)), Number(d.slice(8, 10))) : [])
+const journalDays = ref<Record<string, { entries: number; recordings: number }>>({})
+async function loadJournalDays() {
+  if (!layers.journal) return
+  const [start, end] = currentRange()
+  try {
+    const { data } = await api.get<{ date: string; entries: number; recordings: number }[]>('/api/journal/days', { params: { start, end } })
+    journalDays.value = Object.fromEntries(data.map((d) => [d.date, { entries: d.entries, recordings: d.recordings }]))
+  } catch {
+    journalDays.value = {}
+  }
+}
+const journalFor = (d: string) => (layers.journal ? journalDays.value[d] ?? null : null)
 const holidaysFor = (d: string) => (layers.holidays ? holidaysByDate.value.get(d) ?? [] : [])
 const historyText = (h: { en: string; el: string }) => (locale.value === 'el' ? h.el : h.en)
 // small glyphs under a day's number: which of the switched-on calendars have something that day
@@ -207,9 +221,49 @@ const dayGlyphs = (d: string) => [
   nameDaysFor(d).length ? '✝' : '',
   nationalFor(d).length ? '🏳' : '',
   historyFor(d).length ? '📜' : '',
+  journalFor(d) ? (journalFor(d)!.recordings ? '🎙' : '📓') : '',
 ].filter(Boolean).join('')
 
 watch(() => [layers.holidays, layers.country, locale.value], loadHolidays)
+watch(() => layers.journal, loadJournalDays)
+
+// ── .ics: take your notes to another calendar app, or bring events in from one ──
+const icsInput = ref<HTMLInputElement | null>(null)
+const icsMessage = ref('')
+async function exportIcs() {
+  error.value = ''
+  try {
+    const { data } = await api.get<Blob>('/api/calendar/events/ics', { responseType: 'blob' })
+    const url = URL.createObjectURL(data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'daycompass.ics'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  }
+}
+async function importIcs(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  error.value = icsMessage.value = ''
+  const found = parseIcs(await file.text()).filter((e) => Number(e.date.slice(0, 4)) >= 1900 && Number(e.date.slice(0, 4)) <= 2100).slice(0, 300)
+  let added = 0
+  for (const e of found) {
+    try {
+      await api.post('/api/calendar/events', { title: e.title, event_date: e.date, kind: 'event', notes: e.notes, repeat_yearly: e.yearly, repeat_weekly: e.weekly && !e.yearly })
+      added++
+    } catch (err) {
+      error.value = apiErrorMessage(err)
+      break
+    }
+  }
+  icsMessage.value = t('calendar.ics.done', { n: added })
+  await load()
+}
 
 const isRest = (d: string) => restDays.value.includes(d)
 // a rest day can be set from a week back to three days ahead (the server enforces it too)
@@ -236,6 +290,7 @@ async function load() {
     ])
     restDays.value = rest.data
     loadHolidays()
+    loadJournalDays()
     entries.value = checkIns.data
     events.value = notes.data
   } catch (e) {
@@ -476,6 +531,13 @@ onBeforeUnmount(() => {
         </select>
       </div>
 
+      <div class="flex flex-wrap items-center gap-2 mb-3 text-xs">
+        <button type="button" @click="exportIcs" class="border border-slate-400 text-slate-700 rounded-lg px-3 py-1 hover:bg-slate-50">⬇ {{ t('calendar.ics.exportIcs') }}</button>
+        <button type="button" @click="icsInput?.click()" class="border border-slate-400 text-slate-700 rounded-lg px-3 py-1 hover:bg-slate-50">⬆ {{ t('calendar.ics.importIcs') }}</button>
+        <input ref="icsInput" type="file" accept=".ics,text/calendar" class="hidden" @change="importIcs" />
+        <span v-if="icsMessage" role="status" class="text-ok">{{ icsMessage }}</span>
+      </div>
+
       <template v-if="view === 'month'">
         <div class="grid grid-cols-7 gap-1 text-center text-xs text-slate-500 mb-1">
           <div v-for="w in WEEKDAYS" :key="w">{{ w }}</div>
@@ -537,8 +599,12 @@ onBeforeUnmount(() => {
     </Teleport>
 
     <!-- what the switched-on calendars say about the chosen day -->
-    <section v-if="selected && (holidaysFor(selected).length || nameDaysFor(selected).length || nationalFor(selected).length || historyFor(selected).length)"
+    <section v-if="selected && (journalFor(selected) || holidaysFor(selected).length || nameDaysFor(selected).length || nationalFor(selected).length || historyFor(selected).length)"
       class="bg-surface rounded-xl shadow p-4 space-y-3 border-t-4 border-sky-500">
+      <div v-if="journalFor(selected)">
+        <h4 class="text-sm font-bold text-slate-800">📓 {{ t('calendar.layers.journal') }}</h4>
+        <p class="text-sm text-slate-700">{{ t('calendar.journalDay', { entries: journalFor(selected)!.entries, recordings: journalFor(selected)!.recordings }) }}</p>
+      </div>
       <div v-if="holidaysFor(selected).length">
         <h4 class="text-sm font-bold text-slate-800">🏛 {{ t('calendar.layers.holidays') }} · {{ countryName(layers.country) }}</h4>
         <ul class="text-sm text-slate-700 list-disc pl-5"><li v-for="h in holidaysFor(selected)" :key="h">{{ h }}</li></ul>

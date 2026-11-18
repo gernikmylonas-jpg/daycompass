@@ -708,3 +708,20 @@ html[data-theme="neon"] .compass-lid svg { filter: drop-shadow(0 0 4px currentCo
 @media (prefers-reduced-motion: reduce) {
   .compass-lid { display: none; }
 }
+
+/* ── Wallpapers: a fixed picture behind everything, softened by a veil in the page colour ── */
+.wallpaper {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.wallpaper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--color-page) 58%, transparent);
+}
+html[data-wallpaper="on"] .bg-page {
+  background-color: transparent;
+}

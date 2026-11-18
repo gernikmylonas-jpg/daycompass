@@ -148,6 +148,7 @@ class LeaderboardEntry(BaseModel):
     name: str
     points: int
     is_me: bool
+    has_photo: bool = False  # a picture its owner chose to share with their groups (or my own)
 
 
 class GroupDetail(BaseModel):
@@ -215,6 +216,9 @@ class SettingsPayload(BaseModel):
     language: Optional[str] = None
     mood_style: str = "emoji"
     depth_3d: bool = False
+    wallpaper: Optional[str] = None  # an unlocked wallpaper id
+    wallpapers_on: bool = False
+    quests_on: bool = False
     calendar_prefs: Optional[str] = None  # JSON text, opaque to the server (max 2000 characters)
     lid_open: bool = False  # play the compass lid animation on the home screen
     brightness: int = 100  # lighting of the compass face, percent

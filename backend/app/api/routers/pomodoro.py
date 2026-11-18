@@ -89,3 +89,15 @@ def summary(user_id: str = Depends(get_current_user_id), db: Session = Depends(g
         total_sessions=total_sessions,
         recent=recent,
     )
+
+
+@router.get("/projects")
+def projects(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    """Total focus time per session title (what you called the work), most time first. Untitled sessions are left out."""
+    key = func.lower(func.trim(PomodoroSession.title))
+    rows = (
+        db.query(func.max(PomodoroSession.title), func.coalesce(func.sum(PomodoroSession.duration_minutes), 0), func.count(PomodoroSession.id))
+        .filter(PomodoroSession.user_id == user_id, PomodoroSession.title.isnot(None), func.trim(PomodoroSession.title) != "")
+        .group_by(key).order_by(func.sum(PomodoroSession.duration_minutes).desc()).limit(15).all()
+    )
+    return [{"title": t.strip(), "minutes": int(m), "sessions": n} for t, m, n in rows]
