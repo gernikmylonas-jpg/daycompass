@@ -1,6 +1,6 @@
 // A small .ics reader: just enough of iCalendar (all-day or timed VEVENTs, title, notes, yearly/weekly repeat)
 // to bring events from another calendar app into DayCompass. Anything else in the file is ignored.
-export interface IcsEvent { title: string; date: string; notes: string | null; yearly: boolean; weekly: boolean }
+export interface IcsEvent { title: string; date: string; notes: string | null; yearly: boolean; weekly: boolean; until?: string }
 
 const unescapeText = (s: string) => s.replace(/\\([nN,;\\])/g, (_m, c: string) => (c === 'n' || c === 'N' ? '\n' : c))
 
@@ -8,12 +8,21 @@ export function parseIcs(text: string): IcsEvent[] {
   // lines that start with a space or tab continue the previous one
   const lines = text.replace(/\r\n?/g, '\n').replace(/\n[ \t]/g, '').split('\n')
   const out: IcsEvent[] = []
-  let cur: Partial<IcsEvent> & { rrule?: string } | null = null
+  let cur: Partial<IcsEvent> & { rrule?: string; dtend?: string } | null = null
   for (const line of lines) {
     if (line === 'BEGIN:VEVENT') { cur = {}; continue }
     if (line === 'END:VEVENT') {
       if (cur?.title && cur.date) {
+        // an all-day DTEND is the day *after* the last day
+        let until: string | undefined
+        if (cur.dtend && cur.dtend > cur.date) {
+          const [y, m, d] = cur.dtend.split('-').map(Number)
+          const last = new Date(y, m - 1, d - 1)
+          const iso = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
+          if (iso > cur.date) until = iso
+        }
         out.push({
+          until,
           title: cur.title.slice(0, 100), date: cur.date, notes: cur.notes ? cur.notes.slice(0, 500) : null,
           yearly: /FREQ=YEARLY/i.test(cur.rrule ?? ''), weekly: /FREQ=WEEKLY/i.test(cur.rrule ?? ''),
         })
@@ -29,7 +38,10 @@ export function parseIcs(text: string): IcsEvent[] {
     if (name === 'SUMMARY') cur.title = unescapeText(value).trim()
     else if (name === 'DESCRIPTION') cur.notes = unescapeText(value).trim()
     else if (name === 'RRULE') cur.rrule = value
-    else if (name === 'DTSTART') {
+    else if (name === 'DTEND') {
+      const m = /^(\d{4})(\d{2})(\d{2})/.exec(value)
+      if (m) cur.dtend = `${m[1]}-${m[2]}-${m[3]}`
+    } else if (name === 'DTSTART') {
       const m = /^(\d{4})(\d{2})(\d{2})/.exec(value)
       if (m) cur.date = `${m[1]}-${m[2]}-${m[3]}`
     }

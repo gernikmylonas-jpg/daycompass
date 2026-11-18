@@ -1,7 +1,7 @@
 // Greek Orthodox name days (εορτολόγιο). The fixed feasts follow the common Greek tradition; the movable
 // ones are computed from Orthodox Easter. Lists are indicative: parishes and regions sometimes differ.
 
-/** Orthodox Easter Sunday (Gregorian date), Meeus Julian algorithm + 13 days (valid 1900–2099). */
+/** Orthodox Easter Sunday (Gregorian date), Meeus Julian algorithm + 13 days (valid 1900–2199). */
 export function orthodoxEaster(year: number): Date {
   const a = year % 4
   const b = year % 7
@@ -10,7 +10,7 @@ export function orthodoxEaster(year: number): Date {
   const e = (2 * a + 4 * b - d + 34) % 7
   const month = Math.floor((d + e + 114) / 31) // Julian calendar
   const day = ((d + e + 114) % 31) + 1
-  return new Date(year, month - 1, day + 13)
+  return new Date(year, month - 1, day + (year >= 2100 ? 14 : 13)) // the calendars differ by 13 days until 2099, 14 from 2100
 }
 
 const key = (m: number, d: number) => `${m}-${d}`

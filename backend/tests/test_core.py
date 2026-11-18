@@ -49,7 +49,7 @@ def test_steps_and_sleep_reward_goals_once_and_have_no_history_limit(user):
     assert first["points_awarded"] == 10 and "steps_first" in [b["code"] for b in first["new_badges"]]
     assert user.put("/api/wellness/steps", json={"steps": 12000, "log_date": long_ago}).json()["points_awarded"] == 0
     assert user.put("/api/wellness/sleep", json={"minutes": 450, "quality": 4, "log_date": long_ago}).json()["goal_reached"] is True
-    assert user.put("/api/wellness/steps", json={"steps": 1, "log_date": "1999-12-31"}).status_code == 422
+    assert user.put("/api/wellness/steps", json={"steps": 1, "log_date": "1899-12-31"}).status_code == 422
     assert user.put("/api/wellness/steps", json={"steps": 1, "log_date": str(TODAY + timedelta(days=3))}).status_code == 422
     for i in range(35):
         user.put("/api/wellness/steps", json={"steps": 1000 + i, "log_date": str(TODAY - timedelta(days=3 * i + 1))})

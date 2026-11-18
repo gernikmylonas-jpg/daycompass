@@ -42,7 +42,7 @@ interface History {
   avg_sleep_minutes: number
 }
 
-const EARLIEST = '2000-01-01' // no limit on how far back you can log; this is only a sanity floor
+const EARLIEST = '1900-01-01' // no limit on how far back you can log; this is only a sanity floor
 const PAGE = 30
 const POINTS_STEPS = 10
 const POINTS_SLEEP = 10

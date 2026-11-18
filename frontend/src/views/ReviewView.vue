@@ -16,7 +16,7 @@ interface Year {
 const { t, locale } = useI18n()
 const now = new Date().getFullYear()
 const year = ref(now)
-const years = Array.from({ length: now - 2000 + 1 }, (_, i) => now - i)
+const years = Array.from({ length: now - 1900 + 1 }, (_, i) => now - i)
 const data = ref<Year | null>(null)
 const error = ref('')
 const loc = computed(() => intlLocale(locale.value))

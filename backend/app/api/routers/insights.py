@@ -26,6 +26,6 @@ def year_review(
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    if not 2000 <= year <= date.today().year:
-        raise HTTPException(status_code=422, detail=f"Year must be between 2000 and {date.today().year}")
+    if not 1900 <= year <= date.today().year:
+        raise HTTPException(status_code=422, detail=f"Year must be between 1900 and {date.today().year}")
     return build_year(db, user_id, year)

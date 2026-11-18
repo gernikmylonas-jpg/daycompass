@@ -10,9 +10,9 @@ import {
 import MoonIcon from './MoonIcon.vue'
 import { skyEventsForYear, planetsNow, type SkyEvent, type PlanetId } from '../planets'
 
-// Moon phases, eclipses and sky events for any year from 2000 to 2100, computed on the device.
+// Moon phases, eclipses and sky events for any year from 1900 to 2100, computed on the device.
 
-const MIN_YEAR = 2000
+const MIN_YEAR = 1900
 const MAX_YEAR = 2100
 const YEARS = Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i)
 

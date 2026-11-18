@@ -112,3 +112,22 @@ describe('is a lunar eclipse visible from a place?', () => {
     expect(moonAltitudeAtLunarEclipse(t, newYork)).toBeLessThan(0)
   })
 })
+
+
+describe('the 20th century', () => {
+  it('has a realistic number of eclipses every year from 1900', () => {
+    for (let y = 1900; y < 2000; y++) {
+      const n = eclipsesForYear(y).length
+      expect(n, String(y)).toBeGreaterThanOrEqual(4)
+      expect(n, String(y)).toBeLessThanOrEqual(7)
+    }
+  })
+  it('puts the 1999 total solar eclipse (11 August, about 11:03 UT) in the right minute', () => {
+    const e = eclipsesForYear(1999).find((x) => x.kind === 'solar' && x.type === 'total')!
+    expect(Math.abs(e.date.getTime() - Date.parse('1999-08-11T11:03:00Z'))).toBeLessThan(15 * 60_000)
+  })
+  it('puts the 1919 Eddington eclipse (29 May) on the right day', () => {
+    const e = eclipsesForYear(1919).find((x) => x.kind === 'solar' && x.type === 'total')!
+    expect(e.date.toISOString().slice(0, 10)).toBe('1919-05-29')
+  })
+})

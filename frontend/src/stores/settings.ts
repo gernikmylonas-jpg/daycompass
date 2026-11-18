@@ -44,6 +44,7 @@ export interface CalendarLayers {
   history: boolean // moments from world history and fun facts
   national: boolean // national days of all countries
   journal: boolean // days that have journal entries / recordings
+  cycle: boolean // logged and expected period days
 }
 const LAYERS_KEY = 'calendarLayers'
 const defaultCountry = () => {
@@ -77,7 +78,7 @@ function write(key: string, value: string) {
 }
 
 function parseLayers(raw: string | null | undefined): CalendarLayers {
-  const base: CalendarLayers = { holidays: false, country: defaultCountry(), nameDays: false, history: false, national: false, journal: false }
+  const base: CalendarLayers = { holidays: false, country: defaultCountry(), nameDays: false, history: false, national: false, journal: false, cycle: false }
   if (!raw) return base
   try {
     const v = JSON.parse(raw)
@@ -88,6 +89,7 @@ function parseLayers(raw: string | null | undefined): CalendarLayers {
       history: v.history === true,
       national: v.national === true,
       journal: v.journal === true,
+      cycle: v.cycle === true,
     }
   } catch {
     return base

@@ -9,7 +9,7 @@ import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 import DateField from './DateField.vue'
 import type { Category } from '../stores/habits'
 
-// Month / week calendar for the years 2000-2100: habit check-ins plus the user's own notes
+// Month / week calendar for the years 1900-2100: habit check-ins plus the user's own notes
 // (birthdays that repeat every year, reminders, events, free notes) on any day.
 
 type Kind = 'birthday' | 'reminder' | 'event' | 'note'
@@ -28,6 +28,7 @@ interface CalEvent {
   notes: string | null
   repeat_yearly: boolean
   repeat_weekly: boolean
+  end_date: string | null
   date: string
   original_date: string
 }
@@ -38,7 +39,7 @@ import { historyOn, formatYear } from '../calendars/history'
 import { parseIcs } from '../calendars/ics'
 import { nationalDaysOn, flagOf } from '../calendars/nationalDays'
 
-const MIN_YEAR = 2000
+const MIN_YEAR = 1900
 const MAX_YEAR = 2100
 const KINDS: Kind[] = ['birthday', 'reminder', 'event', 'note']
 const KIND_ICON: Record<Kind, string> = { birthday: '🎂', reminder: '⏰', event: '📌', note: '📝' }
@@ -89,7 +90,7 @@ const selected = ref<string | null>(todayIso)
 const error = ref('')
 
 // note form (add or edit)
-const form = ref<{ id: string | null; title: string; kind: Kind; notes: string; repeat: boolean; weekly: boolean; date: string } | null>(null)
+const form = ref<{ id: string | null; title: string; kind: Kind; notes: string; repeat: boolean; weekly: boolean; date: string; until: string | null } | null>(null)
 const busy = ref(false)
 
 const monthNames = computed(() => {
@@ -160,6 +161,7 @@ const LAYER_DEFS = [
   { key: 'national', icon: '🏳' },
   { key: 'history', icon: '📜' },
   { key: 'journal', icon: '📓' },
+  { key: 'cycle', icon: '🌸' },
 ] as const
 
 const regionNames = computed(() => new Intl.DisplayNames([loc.value], { type: 'region' }))
@@ -212,6 +214,22 @@ async function loadJournalDays() {
     journalDays.value = {}
   }
 }
+const cycleDays = ref<{ logged: Set<string>; expected: Set<string> }>({ logged: new Set(), expected: new Set() })
+async function loadCycle() {
+  if (!layers.cycle) return
+  try {
+    const { data } = await api.get<{ days: { date: string }[]; predictions: { start: string; length: number }[] }>('/api/cycle')
+    const expected = new Set<string>()
+    for (const p of data.predictions) {
+      const s = parse(p.start)
+      for (let i = 0; i < p.length; i++) expected.add(toIso(new Date(s.getFullYear(), s.getMonth(), s.getDate() + i)))
+    }
+    cycleDays.value = { logged: new Set(data.days.map((d) => d.date)), expected }
+  } catch {
+    cycleDays.value = { logged: new Set(), expected: new Set() }
+  }
+}
+const cycleFor = (d: string): 'logged' | 'expected' | null => (!layers.cycle ? null : cycleDays.value.logged.has(d) ? 'logged' : cycleDays.value.expected.has(d) ? 'expected' : null)
 const journalFor = (d: string) => (layers.journal ? journalDays.value[d] ?? null : null)
 const holidaysFor = (d: string) => (layers.holidays ? holidaysByDate.value.get(d) ?? [] : [])
 const historyText = (h: { en: string; el: string }) => (locale.value === 'el' ? h.el : h.en)
@@ -222,10 +240,12 @@ const dayGlyphs = (d: string) => [
   nationalFor(d).length ? '🏳' : '',
   historyFor(d).length ? '📜' : '',
   journalFor(d) ? (journalFor(d)!.recordings ? '🎙' : '📓') : '',
+  cycleFor(d) ? (cycleFor(d) === 'logged' ? '🌸' : '◌') : '',
 ].filter(Boolean).join('')
 
 watch(() => [layers.holidays, layers.country, locale.value], loadHolidays)
 watch(() => layers.journal, loadJournalDays)
+watch(() => layers.cycle, loadCycle)
 
 // ── .ics: take your notes to another calendar app, or bring events in from one ──
 const icsInput = ref<HTMLInputElement | null>(null)
@@ -260,7 +280,7 @@ async function importIcs(ev: Event) {
   let added = 0
   for (const e of found) {
     try {
-      await api.post('/api/calendar/events', { title: e.title, event_date: e.date, kind: 'event', notes: e.notes, repeat_yearly: e.yearly, repeat_weekly: e.weekly && !e.yearly })
+      await api.post('/api/calendar/events', { title: e.title, event_date: e.date, kind: 'event', notes: e.notes, repeat_yearly: e.yearly, repeat_weekly: e.weekly && !e.yearly && !e.until, end_date: e.until ?? null })
       added++
     } catch (err) {
       error.value = apiErrorMessage(err)
@@ -297,6 +317,7 @@ async function load() {
     restDays.value = rest.data
     loadHolidays()
     loadJournalDays()
+    loadCycle()
     entries.value = checkIns.data
     events.value = notes.data
   } catch (e) {
@@ -365,11 +386,11 @@ function uniqueCategories(list: CheckInEntry[]) {
 // ── notes ────────────────────────────────────────────────────────────────
 function startNew() {
   if (!selected.value) return
-  form.value = { id: null, title: '', kind: 'note', notes: '', repeat: false, weekly: false, date: selected.value }
+  form.value = { id: null, title: '', kind: 'note', notes: '', repeat: false, weekly: false, date: selected.value, until: null }
 }
 
 function startEdit(ev: CalEvent) {
-  form.value = { id: ev.id, title: ev.title, kind: ev.kind, notes: ev.notes ?? '', repeat: ev.repeat_yearly, weekly: ev.repeat_weekly, date: ev.original_date }
+  form.value = { id: ev.id, title: ev.title, kind: ev.kind, notes: ev.notes ?? '', repeat: ev.repeat_yearly, weekly: ev.repeat_weekly, date: ev.original_date, until: ev.end_date }
 }
 
 // a birthday repeats every year by default
@@ -383,7 +404,7 @@ async function save() {
   busy.value = true
   error.value = ''
   try {
-    const payload = { title: f.title, event_date: f.date, kind: f.kind, notes: f.notes || null, repeat_yearly: f.repeat, repeat_weekly: f.weekly }
+    const payload = { title: f.title, event_date: f.date, kind: f.kind, notes: f.notes || null, repeat_yearly: f.repeat, repeat_weekly: f.weekly, end_date: f.until || null }
     if (f.id) await api.put(`/api/calendar/events/${f.id}`, payload)
     else {
       const { data } = await api.post<{ new_badges?: BadgeInfo[] }>('/api/calendar/events', payload)
@@ -440,7 +461,7 @@ async function addFromMenu(kind: Kind) {
   closeMenu()
   if (!date) return
   selected.value = date
-  form.value = { id: null, title: '', kind, notes: '', repeat: kind === 'birthday', weekly: false, date }
+  form.value = { id: null, title: '', kind, notes: '', repeat: kind === 'birthday', weekly: false, date, until: null }
   await nextTick()
   titleInput.value?.focus()
 }
@@ -487,7 +508,7 @@ onBeforeUnmount(() => {
     <p v-if="error" role="alert" class="text-danger text-sm">{{ error }}</p>
 
     <section class="bg-surface rounded-xl shadow p-4 border-t-4 border-slate-400">
-      <!-- year / month pickers (2000-2100) and view switch -->
+      <!-- year / month pickers (1900-2100) and view switch -->
       <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div class="flex items-center gap-2">
           <label class="sr-only" :for="`cal-month-${view}`">{{ t('calendar.monthLabel') }}</label>
@@ -605,8 +626,12 @@ onBeforeUnmount(() => {
     </Teleport>
 
     <!-- what the switched-on calendars say about the chosen day -->
-    <section v-if="selected && (journalFor(selected) || holidaysFor(selected).length || nameDaysFor(selected).length || nationalFor(selected).length || historyFor(selected).length)"
+    <section v-if="selected && (cycleFor(selected) || journalFor(selected) || holidaysFor(selected).length || nameDaysFor(selected).length || nationalFor(selected).length || historyFor(selected).length)"
       class="bg-surface rounded-xl shadow p-4 space-y-3 border-t-4 border-sky-500">
+      <div v-if="cycleFor(selected)">
+        <h4 class="text-sm font-bold text-slate-800">🌸 {{ t('calendar.layers.cycle') }}</h4>
+        <p class="text-sm text-slate-700">{{ t(cycleFor(selected) === 'logged' ? 'cycle.logged' : 'cycle.expected') }}</p>
+      </div>
       <div v-if="journalFor(selected)">
         <h4 class="text-sm font-bold text-slate-800">📓 {{ t('calendar.layers.journal') }}</h4>
         <p class="text-sm text-slate-700">{{ t('calendar.journalDay', { entries: journalFor(selected)!.entries, recordings: journalFor(selected)!.recordings }) }}</p>
@@ -660,6 +685,7 @@ onBeforeUnmount(() => {
               {{ ev.title }}
               <span v-if="ev.repeat_yearly" class="text-xs font-normal text-slate-500">· {{ t('calendar.yearly') }}</span>
               <span v-if="ev.repeat_weekly" class="text-xs font-normal text-slate-500">· {{ t('calendar.weekly') }}</span>
+              <span v-if="ev.end_date" class="text-xs font-normal text-slate-500">· {{ formatDate(ev.original_date) }} – {{ formatDate(ev.end_date) }}</span>
             </p>
             <p v-if="ev.notes" class="text-xs text-slate-500 break-words whitespace-pre-line">{{ ev.notes }}</p>
           </div>
@@ -698,6 +724,16 @@ onBeforeUnmount(() => {
         <textarea v-model="form.notes" rows="2" maxlength="500"
           :placeholder="t('calendar.details')" :aria-label="t('calendar.details')"
           class="w-full border rounded-lg px-3 py-2 text-sm"></textarea>
+        <div class="text-xs text-slate-600">
+          <label class="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" class="h-4 w-4" :checked="form.until !== null" @change="form!.until = ($event.target as HTMLInputElement).checked ? form!.date : null; if (form!.until) form!.weekly = false" />
+            {{ t('calendar.lastsDays') }}
+          </label>
+          <div v-if="form.until !== null" class="mt-1">
+            <span>{{ t('calendar.until') }}</span>
+            <DateField v-model="form.until" :min="form.date" max="2100-12-31" :label="t('calendar.until')" required class="mt-1" />
+          </div>
+        </div>
         <div class="flex flex-wrap gap-x-5 gap-y-1">
           <label class="flex items-center gap-2 text-sm text-slate-700">
             <input v-model="form.repeat" type="checkbox" class="h-4 w-4" @change="form!.weekly = false" />

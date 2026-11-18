@@ -54,7 +54,7 @@ The **Settings** menu (top right) switches between 7 compass styles and toggles 
 
 ## The compass home screen
 
-The home page is a big compass with eight directions. N, E, S and W hold habits (steps & sleep sit inside N), SW is the Pomodoro timer, SE the calendar (2000–2100, with notes, birthdays and reminders), NW the groups, and NE is still reserved. Pressing a letter opens that direction's panel; the ring around each letter shows today's progress. The symbol in the middle (different for every compass style, and it turns to face the pointer) opens points and badges. Clicking the "DayCompass" title opens a short guide.
+The home page is a big compass with eight directions. N, E, S and W hold habits (steps & sleep sit inside N), SW is the Pomodoro timer, SE the calendar (1900–2100, with notes, birthdays and reminders), NW the groups, and NE is still reserved. Pressing a letter opens that direction's panel; the ring around each letter shows today's progress. The symbol in the middle (different for every compass style, and it turns to face the pointer) opens points and badges. Clicking the "DayCompass" title opens a short guide.
 
 To give a reserved direction a feature, change its entry in `directions` in `frontend/src/views/HomeView.vue` (`kind: 'soon'` becomes `'habits'`, `'pomodoro'`, `'groups'`, `'calendar'` or a new kind) and add its panel next to the others.
 
@@ -62,12 +62,12 @@ To give a reserved direction a feature, change its entry in `directions` in `fro
 
 | Direction | Contents |
 |---|---|
-| N | Body habits · **Steps** (log any date since 2000; complete history, no retention limit) |
-| E | Schedule habits · **Calendars: Moon & eclipses** (moon phases for every day 2000–2100, solar and lunar eclipses, equinoxes/solstices, meteor showers) |
+| N | Body habits · **Steps** (log any date since 1900; complete history, no retention limit) |
+| E | Schedule habits · **Calendars: Moon & eclipses** (moon phases for every day 1900–2100, solar and lunar eclipses, equinoxes/solstices, meteor showers) |
 | S | Mind habits · **Journal** (write and/or record your voice; private to your account) · **Daily mood** (1–10 as emoji, colours or words) · **Meditation** (timer with a breathing guide, +5 points) |
 | W | Work & study habits |
 | NW | Groups with a live leaderboard |
-| SE | Calendar 2000–2100 with notes, birthdays and reminders (right-click a day to add one) |
+| SE | Calendar 1900–2100 with notes, birthdays and reminders (right-click a day to add one) |
 | SW | Pomodoro timer |
 | NE | **Sleep** (hours, quality; complete history, no retention limit) |
 
@@ -119,6 +119,10 @@ North: water (glasses), workouts. South: gratitude. West: focus sounds (generate
 ## Planets, groups, small extras
 
 *Moon & eclipses → Sky events* also lists planetary oppositions, greatest elongations, conjunctions with the Sun and between planets, and the Earth's perihelion/aphelion (`frontend/src/planets.ts`, from JPL's approximate Keplerian elements; about a day of accuracy up to 2050), plus which planets are in the evening or morning sky today. Groups have shared habits with a group streak (everyone must do it), one-emoji cheers, and optional profile pictures (a member's picture is shown to their groups only if they switch it on in their profile). Focus time is totalled per session title, and the breathing exercises have more patterns.
+
+## Money (West), multi-day notes, 1900–2100
+
+West has **Budget** (monthly income/expenses, a monthly budget, limits per category, and separate **trip** budgets with their own currency and a daily allowance) and **Savings** (goals with a deadline: monthly amount needed, projected date at your recent pace, deposits and withdrawals). Private; amounts are stored as whole cents. A calendar note can last several days (*Lasts several days → Until*). Calendar, dates and astronomy run from 1900 to 2100 (planet positions are most accurate 1800–2050).
 
 ## Tests and CI
 

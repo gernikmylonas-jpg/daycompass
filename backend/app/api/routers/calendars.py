@@ -6,7 +6,7 @@ from app.infrastructure.security import get_current_user_id
 
 router = APIRouter(prefix="/api/calendars", tags=["calendars"])
 
-MIN_YEAR, MAX_YEAR = 1950, 2100
+MIN_YEAR, MAX_YEAR = 1900, 2100
 
 
 @lru_cache(maxsize=1)

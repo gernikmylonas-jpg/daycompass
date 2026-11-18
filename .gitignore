@@ -16,3 +16,6 @@ frontend/dist/
 .DS_Store
 # Database backups (personal data)
 backups/
+
+# Private notes and exports (not for a public repository)
+docs/hidden/

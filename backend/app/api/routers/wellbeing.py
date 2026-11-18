@@ -22,7 +22,7 @@ WORKOUT_KINDS = {"walk", "run", "cycle", "swim", "gym", "yoga", "sport", "other"
 MAX_MINUTES = 600
 MAX_GRATITUDE_PER_DAY = 5
 MAX_GRATITUDE_LEN = 200
-EARLIEST = date(2000, 1, 1)
+EARLIEST = date(1900, 1, 1)
 
 
 def _day(d: Optional[date]) -> date:
@@ -30,7 +30,7 @@ def _day(d: Optional[date]) -> date:
     if (d - date.today()).days > 1:  # one day of slack for time zones ahead of the server
         raise HTTPException(status_code=422, detail="Date cannot be in the future")
     if d < EARLIEST:
-        raise HTTPException(status_code=422, detail="Date cannot be before 2000")
+        raise HTTPException(status_code=422, detail="Date cannot be before 1900")
     return d
 
 

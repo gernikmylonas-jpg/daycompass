@@ -231,6 +231,7 @@ class CalendarEvent(Base):
     notes = Column(Text, nullable=True)
     repeat_yearly = Column(Boolean, nullable=False, default=False)
     repeat_weekly = Column(Boolean, nullable=False, default=False)
+    end_date = Column(Date, nullable=True)  # a note that lasts several days (a trip, a holiday, a course)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
@@ -469,3 +470,85 @@ class PushLog(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     sent_on = Column(Date, nullable=False)
+
+
+# ─── Money: budget, savings, trips (amounts in whole cents) ───
+
+class MoneyProfile(Base):
+    __tablename__ = "money_profiles"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    currency = Column(String, nullable=False, default="EUR")
+    monthly_budget_cents = Column(Integer, nullable=True)
+
+
+class Trip(Base):
+    __tablename__ = "trips"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    currency = Column(String, nullable=False, default="EUR")
+    budget_cents = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class MoneyEntry(Base):
+    __tablename__ = "money_entries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    entry_date = Column(Date, nullable=False, index=True)
+    kind = Column(String, nullable=False)  # expense | income
+    amount_cents = Column(Integer, nullable=False)
+    category = Column(String, nullable=False)
+    note = Column(String, nullable=True)
+    trip_id = Column(UUID(as_uuid=True), ForeignKey("trips.id"), nullable=True, index=True)  # set: a trip expense, in the trip's currency
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class BudgetLimit(Base):
+    __tablename__ = "budget_limits"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    category = Column(String, primary_key=True)
+    monthly_cents = Column(Integer, nullable=False)
+
+
+class SavingsGoal(Base):
+    __tablename__ = "savings_goals"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    kind = Column(String, nullable=False, default="general")  # general | trip
+    target_cents = Column(Integer, nullable=False)
+    deadline = Column(Date, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class SavingsDeposit(Base):
+    __tablename__ = "savings_deposits"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    goal_id = Column(UUID(as_uuid=True), ForeignKey("savings_goals.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    entry_date = Column(Date, nullable=False)
+    amount_cents = Column(Integer, nullable=False)  # negative = money taken out
+    note = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+# ─── Period tracking (private, opt-in) ───────────────────
+
+class PeriodDay(Base):
+    __tablename__ = "period_days"
+    __table_args__ = (UniqueConstraint("user_id", "day", name="uq_period_day"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    day = Column(Date, nullable=False)
+    flow = Column(String, nullable=True)  # spotting | light | medium | heavy
+    note = Column(String, nullable=True)

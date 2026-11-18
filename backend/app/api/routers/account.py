@@ -9,6 +9,7 @@ from app.infrastructure.security import get_current_user_id, verify_password
 from app.application.services.group_cleanup import drop_group_extras
 from app.domain.models import (
     WeightLog, WeightProfile, WallpaperUnlock, Goal, WaterLog, Workout, GratitudeEntry, QuestReward, ProfilePhoto, GroupHabit, GroupHabitCheck, Cheer, PushSubscription, PushLog,
+    MoneyProfile, MoneyEntry, BudgetLimit, SavingsGoal, SavingsDeposit, Trip, PeriodDay,
     User, Habit, CheckIn, PomodoroSession, StepLog, SleepLog, MoodLog, MeditationSession, JournalEntry, JournalAudio,
     CalendarEvent, RestDay, UserBadge, Badge, UserSettings, ReminderSetting, ReminderLog, EventMailLog, JournalLock,
     Group, GroupMember, Challenge,
@@ -53,6 +54,7 @@ def export_data(
         journal = {"locked": True, "note": "Send the journal PIN (X-Journal-Pin) to include the journal."}
 
     settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+    mp = db.query(MoneyProfile).filter(MoneyProfile.user_id == user_id).first()
     wp = db.query(WeightProfile).filter(WeightProfile.user_id == user_id).first()
     data = {
         "exported_at": datetime.utcnow(),
@@ -89,6 +91,18 @@ def export_data(
         "quests_completed": [{"date": q.reward_date, "quest": q.quest_id} for q in db.query(QuestReward).filter(QuestReward.user_id == user_id)],
         "has_profile_photo": db.query(ProfilePhoto).filter(ProfilePhoto.user_id == user_id).first() is not None,
         "push_devices": db.query(PushSubscription).filter(PushSubscription.user_id == user_id).count(),
+        "money": {
+            "currency": mp.currency if mp else None, "monthly_budget_cents": mp.monthly_budget_cents if mp else None,
+            "entries": [{"date": m.entry_date, "kind": m.kind, "amount_cents": m.amount_cents, "category": m.category, "note": m.note, "trip": str(m.trip_id) if m.trip_id else None}
+                        for m in db.query(MoneyEntry).filter(MoneyEntry.user_id == user_id)],
+            "limits": [{"category": l.category, "monthly_cents": l.monthly_cents} for l in db.query(BudgetLimit).filter(BudgetLimit.user_id == user_id)],
+            "trips": [{"id": str(t.id), "name": t.name, "start": t.start_date, "end": t.end_date, "currency": t.currency, "budget_cents": t.budget_cents}
+                      for t in db.query(Trip).filter(Trip.user_id == user_id)],
+            "savings": [{"name": g.name, "kind": g.kind, "target_cents": g.target_cents, "deadline": g.deadline,
+                         "deposits": [{"date": d.entry_date, "amount_cents": d.amount_cents, "note": d.note} for d in db.query(SavingsDeposit).filter(SavingsDeposit.goal_id == g.id)]}
+                        for g in db.query(SavingsGoal).filter(SavingsGoal.user_id == user_id)],
+        },
+        "period_days": [{"date": d.day, "flow": d.flow, "note": d.note} for d in db.query(PeriodDay).filter(PeriodDay.user_id == user_id)],
         "rest_days": [r.rest_date for r in db.query(RestDay).filter(RestDay.user_id == user_id)],
         "badges": [{"code": code, "awarded_at": at} for code, at in
                    db.query(Badge.code, UserBadge.awarded_at).join(UserBadge, UserBadge.badge_id == Badge.id).filter(UserBadge.user_id == user_id)],
@@ -129,11 +143,14 @@ def delete_user_data(db: Session, user_id) -> None:
     entry_ids = [e for (e,) in db.query(JournalEntry.id).filter(JournalEntry.user_id == user_id)]
     if entry_ids:
         db.query(JournalAudio).filter(JournalAudio.entry_id.in_(entry_ids)).delete(synchronize_session=False)
+    db.query(SavingsDeposit).filter(SavingsDeposit.user_id == user_id).delete(synchronize_session=False)
+    db.query(MoneyEntry).filter(MoneyEntry.user_id == user_id).delete(synchronize_session=False)
     habit_ids = [h for (h,) in db.query(Habit.id).filter(Habit.user_id == user_id)]
     if habit_ids:
         db.query(CheckIn).filter(CheckIn.habit_id.in_(habit_ids)).delete(synchronize_session=False)
     for model in (JournalEntry, Habit, MoodLog, MeditationSession, CalendarEvent, StepLog, SleepLog, PomodoroSession,
-                  RestDay, WeightLog, WeightProfile, WallpaperUnlock, Goal, WaterLog, Workout, GratitudeEntry, QuestReward, ProfilePhoto, PushSubscription, PushLog, UserBadge, UserSettings, ReminderSetting, ReminderLog, EventMailLog, JournalLock, GroupMember):
+                  RestDay, WeightLog, WeightProfile, WallpaperUnlock, Goal, WaterLog, Workout, GratitudeEntry, QuestReward, ProfilePhoto, PushSubscription, PushLog,
+                  SavingsGoal, Trip, BudgetLimit, MoneyProfile, PeriodDay, UserBadge, UserSettings, ReminderSetting, ReminderLog, EventMailLog, JournalLock, GroupMember):
         db.query(model).filter(model.user_id == user_id).delete(synchronize_session=False)
     db.query(User).filter(User.id == user_id).delete(synchronize_session=False)
     db.commit()

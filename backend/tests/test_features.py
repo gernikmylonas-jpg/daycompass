@@ -318,7 +318,7 @@ def test_year_review_totals(user):
     assert r["checkins_by_month"][today.month - 1] == 1 and r["best_month"] == today.month
     assert r["top_habits"] == [{"name": "Read", "count": 1}] and r["steps_total"] == 9000 and r["step_goal_days"] == 1
     assert r["mood_avg"] == 8.0 and r["badges_earned"] >= 1
-    assert user.get("/api/insights/year", params={"year": 1999}).status_code == 422
+    assert user.get("/api/insights/year", params={"year": 1899}).status_code == 422
     assert user.get("/api/insights/year", params={"year": today.year + 1}).status_code == 422
 
 
@@ -625,3 +625,135 @@ def test_calendar_notes_mail_needs_its_own_switch(user, monkeypatch):
     assert user.get("/api/reminders").json()["events_enabled"] is True
     assert event_mail.send_event_mails(db, TODAY)["sent"] == 1
     db.close()
+
+
+def test_two_recordings_on_the_same_day(user):
+    from datetime import date
+    day = str(date.today())
+    ids = []
+    for n in (1, 2):
+        r = user.post("/api/journal", data={"entry_date": day, "audio_seconds": str(n * 5)}, files={"audio": ("a.webm", b"\x1aE\xdf\xa3" + bytes([n]) * 20, "audio/webm")})
+        assert r.status_code == 200 and r.json()["has_audio"] is True
+        ids.append(r.json()["id"])
+    assert ids[0] != ids[1]
+    listing = user.get("/api/journal").json()["entries"]
+    assert [e["audio_seconds"] for e in listing if e["entry_date"] == day] == [10, 5]  # newest first, both kept
+    assert user.get(f"/api/journal/{ids[0]}/audio").content != user.get(f"/api/journal/{ids[1]}/audio").content
+    days = user.get("/api/journal/days", params={"start": day, "end": day}).json()
+    assert days == [{"date": day, "entries": 2, "recordings": 2}]
+
+
+def test_events_that_last_several_days(user):
+    e = user.post("/api/calendar/events", json={"title": "Crete", "event_date": "2026-08-03", "end_date": "2026-08-06", "kind": "event"}).json()
+    assert e["end_date"] == "2026-08-06"
+    assert user.post("/api/calendar/events", json={"title": "x", "event_date": "2026-08-03", "end_date": "2026-08-01"}).status_code == 422
+    assert user.post("/api/calendar/events", json={"title": "x", "event_date": "2026-08-03", "end_date": "2026-08-05", "repeat_weekly": True}).status_code == 422
+    days = lambda a, b: [x["date"] for x in user.get("/api/calendar/events", params={"start": a, "end": b}).json()]
+    assert days("2026-08-01", "2026-08-31") == ["2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06"]
+    assert days("2026-08-05", "2026-08-05") == ["2026-08-05"]          # a day in the middle of the range
+    assert days("2026-07-01", "2026-08-02") == [] and days("2026-08-07", "2026-08-20") == []
+    # yearly + range, running over New Year
+    user.post("/api/calendar/events", json={"title": "Ski week", "event_date": "2026-12-29", "end_date": "2027-01-02", "repeat_yearly": True})
+    assert days("2027-12-30", "2028-01-03") == ["2027-12-30", "2027-12-31", "2028-01-01", "2028-01-02"]
+    assert days("2028-01-01", "2028-01-01") == ["2028-01-01"]
+    ics = user.get("/api/calendar/events/ics").text
+    assert "DTEND;VALUE=DATE:20260807" in ics  # all-day ends are exclusive in .ics
+    assert user.put(f"/api/calendar/events/{e['id']}", json={"title": "Crete", "event_date": "2026-08-03", "end_date": None}).json()["end_date"] is None
+
+
+def test_budget_month_limits_and_privacy(user, other):
+    from datetime import date
+    today = date.today()
+    assert user.get("/api/money/profile").json()["currency"] == "EUR"
+    assert user.put("/api/money/profile", json={"currency": "euro"}).status_code == 422
+    user.put("/api/money/profile", json={"currency": "usd", "monthly_budget": 1000})
+    assert user.post("/api/money/entries", json={"kind": "expense", "amount": 0, "category": "food"}).status_code == 422
+    assert user.post("/api/money/entries", json={"kind": "expense", "amount": 5, "category": "salary"}).status_code == 422
+    user.post("/api/money/entries", json={"kind": "income", "amount": 2000.50, "category": "salary"})
+    user.post("/api/money/entries", json={"kind": "expense", "amount": 12.34, "category": "food", "note": "lunch"})
+    user.post("/api/money/entries", json={"kind": "expense", "amount": 100, "category": "fun"})
+    user.put("/api/money/limits", json={"category": "food", "monthly": 10})
+    m = user.get("/api/money/month").json()
+    assert m["currency"] == "USD" and m["income_cents"] == 200050 and m["spent_cents"] == 11234 and m["balance_cents"] == 200050 - 11234
+    assert m["budget_cents"] == 100000 and m["left_cents"] == 100000 - 11234
+    food = next(c for c in m["categories"] if c["category"] == "food")
+    assert food == {"category": "food", "spent_cents": 1234, "limit_cents": 1000}  # over its limit: the app can show it
+    assert len(m["entries"]) == 3 and other.get("/api/money/month").json()["entries"] == []
+    assert user.delete(f"/api/money/entries/{m['entries'][0]['id']}").status_code == 200
+    assert other.delete(f"/api/money/entries/{m['entries'][1]['id']}").status_code == 404
+
+
+def test_savings_goals_projection_and_withdrawals(user):
+    from datetime import date, timedelta
+    g = user.post("/api/money/savings", json={"name": "Laptop", "target": 1000, "deadline": str(date.today() + timedelta(days=305))}).json()
+    assert g["saved_cents"] == 0 and g["monthly_needed_cents"] is not None and 9000 <= g["monthly_needed_cents"] <= 11000
+    assert user.post(f"/api/money/savings/{g['id']}/deposit", json={"amount": 0}).status_code == 422
+    assert user.post(f"/api/money/savings/{g['id']}/deposit", json={"amount": -5}).status_code == 422  # nothing saved yet
+    d = user.post(f"/api/money/savings/{g['id']}/deposit", json={"amount": 250}).json()
+    assert d["saved_cents"] == 25000 and d["percent"] == 25 and d["projected"] is not None
+    w = user.post(f"/api/money/savings/{g['id']}/deposit", json={"amount": -50}).json()
+    assert w["saved_cents"] == 20000
+    done = user.post(f"/api/money/savings/{g['id']}/deposit", json={"amount": 800}).json()
+    assert done["done"] is True and done["remaining_cents"] == 0
+    assert user.delete(f"/api/money/savings/{g['id']}").status_code == 200 and user.get("/api/money/savings").json()["goals"] == []
+
+
+def test_trip_budget_daily_allowance_and_separate_from_the_month(user, other):
+    from datetime import date, timedelta
+    today = date.today()
+    t = user.post("/api/money/trips", json={"name": "Lisbon", "start_date": str(today), "end_date": str(today + timedelta(days=4)), "budget": 500, "currency": "eur"}).json()
+    assert t["total_days"] == 5 and t["daily_allowance_cents"] == 10000 and t["currency"] == "EUR"
+    assert user.post("/api/money/trips", json={"name": "x", "start_date": str(today), "end_date": str(today - timedelta(days=1)), "budget": 5}).status_code == 422
+    assert user.post("/api/money/entries", json={"kind": "income", "amount": 5, "category": "other", "trip_id": t["id"]}).status_code == 422  # trips only have expenses
+    assert user.post("/api/money/entries", json={"kind": "expense", "amount": 5, "category": "home", "trip_id": t["id"]}).status_code == 422  # not a trip category
+    user.post("/api/money/entries", json={"kind": "expense", "amount": 120, "category": "lodging", "trip_id": t["id"]})
+    user.post("/api/money/entries", json={"kind": "expense", "amount": 30, "category": "food", "trip_id": t["id"]})
+    got = user.get("/api/money/trips").json()[0]
+    assert got["spent_cents"] == 15000 and got["left_cents"] == 35000 and got["percent"] == 30
+    assert got["by_category"][0] == {"category": "lodging", "spent_cents": 12000}
+    assert got["left_per_day_cents"] is not None and got["avg_per_day_cents"] == 15000  # first day: everything spent so far
+    assert user.get("/api/money/month").json()["spent_cents"] == 0  # trip money is not everyday spending
+    assert other.post("/api/money/entries", json={"kind": "expense", "amount": 5, "category": "food", "trip_id": t["id"]}).status_code == 404
+    assert user.get("/api/account/export").json()["money"]["trips"][0]["name"] == "Lisbon"
+    assert user.delete(f"/api/money/trips/{t['id']}").status_code == 200 and user.get("/api/money/trips").json() == []
+
+
+def test_changing_a_savings_goal_and_a_trip_budget(user, other):
+    from datetime import date, timedelta
+    g = user.post("/api/money/savings", json={"name": "Laptop", "target": 800}).json()
+    user.post(f"/api/money/savings/{g['id']}/deposit", json={"amount": 200})
+    up = user.put(f"/api/money/savings/{g['id']}", json={"name": "Better laptop", "target": 1000, "deadline": str(date.today() + timedelta(days=100)), "kind": "general"}).json()
+    assert up["name"] == "Better laptop" and up["target_cents"] == 100000 and up["saved_cents"] == 20000 and up["percent"] == 20 and up["monthly_needed_cents"]
+    low = user.put(f"/api/money/savings/{g['id']}", json={"name": "Better laptop", "target": 150, "kind": "general"}).json()  # a target below what is saved: reached
+    assert low["done"] is True and low["deadline"] is None
+    assert user.put(f"/api/money/savings/{g['id']}", json={"name": "x", "target": 0}).status_code == 422
+    assert other.put(f"/api/money/savings/{g['id']}", json={"name": "x", "target": 5}).status_code == 404
+    t = user.post("/api/money/trips", json={"name": "Rome", "start_date": str(date.today()), "end_date": str(date.today() + timedelta(days=3)), "budget": 400}).json()
+    new = user.put(f"/api/money/trips/{t['id']}", json={"name": "Rome", "start_date": t["start_date"], "end_date": t["end_date"], "budget": 600}).json()
+    assert new["budget_cents"] == 60000 and new["daily_allowance_cents"] == 15000
+
+
+def test_period_tracking_cycles_predictions_and_privacy(user, other):
+    from datetime import date, timedelta
+    today = date.today()
+    first = today - timedelta(days=60)
+    assert user.get("/api/cycle").json()["predictions"] == []  # nothing is assumed without data
+    assert user.put(f"/api/cycle/day/{today}", json={"flow": "huge"}).status_code == 422
+    assert user.post("/api/cycle/range", json={"start": str(first), "end": str(first - timedelta(days=1))}).status_code == 422
+    assert user.post("/api/cycle/range", json={"start": str(first), "end": str(first + timedelta(days=20))}).status_code == 422
+    for k in range(3):  # three periods of 5 days, 28 days apart: the last one started 4 days ago
+        s = today - timedelta(days=4 + 28 * (2 - k))
+        assert user.post("/api/cycle/range", json={"start": str(s), "end": str(s + timedelta(days=4)), "flow": "medium"}).json()["added"] == 5
+    data = user.get("/api/cycle").json()
+    assert [p["length"] for p in data["periods"]] == [5, 5, 5]
+    assert data["stats"]["average_cycle"] == 28 and data["stats"]["average_period"] == 5 and data["stats"]["regular"] is None  # regularity needs 3+ cycles
+    assert data["cycle_lengths"] == [28, 28]
+    last_start = today - timedelta(days=4)
+    assert data["predictions"][0]["start"] == str(last_start + timedelta(days=28))
+    assert data["next_in_days"] == 24 and data["stats"]["current_cycle_day"] == 5
+    user.put(f"/api/cycle/day/{today}", json={"flow": "light", "note": "cramps"})
+    assert any(d["date"] == str(today) and d["note"] == "cramps" for d in user.get("/api/cycle").json()["days"])
+    assert other.get("/api/cycle").json()["days"] == [] and other.delete(f"/api/cycle/day/{today}").status_code == 404
+    assert user.delete(f"/api/cycle/day/{today}").status_code == 200
+    export = user.get("/api/account/export").json()
+    assert len(export["period_days"]) >= 14

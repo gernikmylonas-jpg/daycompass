@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/weight", tags=["weight"])
 
 MIN_KG, MAX_KG = 20.0, 400.0
 MIN_CM, MAX_CM = 80, 250
-EARLIEST = date(2000, 1, 1)
+EARLIEST = date(1900, 1, 1)
 RAPID_LOSS_PER_WEEK = 0.015  # more than 1.5% of body weight in a week is worth a gentle word of caution
 
 
@@ -63,7 +63,7 @@ def log_weight(day: date, payload: WeightIn, user_id: str = Depends(get_current_
     if (day - date.today()).days > 1:  # one day of slack for time zones ahead of the server
         raise HTTPException(status_code=422, detail="Date cannot be in the future")
     if day < EARLIEST:
-        raise HTTPException(status_code=422, detail="Date cannot be before 2000")
+        raise HTTPException(status_code=422, detail="Date cannot be before 1900")
     row = db.query(WeightLog).filter(WeightLog.user_id == user_id, WeightLog.log_date == day).first()
     if row is None:
         row = WeightLog(user_id=user_id, log_date=day, kg=round(payload.kg, 2))

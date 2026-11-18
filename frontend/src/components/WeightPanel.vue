@@ -160,7 +160,7 @@ onMounted(load)
     <section class="bg-surface rounded-xl shadow p-4 space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="font-bold text-slate-800">{{ t('weight.log') }}</h3>
-        <DateField v-model="date" min="2000-01-01" :max="today" :label="t('wellness.date')" required />
+        <DateField v-model="date" min="1900-01-01" :max="today" :label="t('wellness.date')" required />
       </div>
       <form @submit.prevent="save" class="flex items-end gap-3">
         <label class="text-sm text-slate-600 flex-1">

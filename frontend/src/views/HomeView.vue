@@ -20,6 +20,9 @@ import WeightPanel from '../components/WeightPanel.vue'
 import WaterPanel from '../components/WaterPanel.vue'
 import WorkoutPanel from '../components/WorkoutPanel.vue'
 import GratitudePanel from '../components/GratitudePanel.vue'
+import BudgetPanel from '../components/BudgetPanel.vue'
+import CyclePanel from '../components/CyclePanel.vue'
+import SavingsPanel from '../components/SavingsPanel.vue'
 import AstronomyPanel from '../components/AstronomyPanel.vue'
 import JournalPanel from '../components/JournalPanel.vue'
 import MoodPanel from '../components/MoodPanel.vue'
@@ -159,7 +162,7 @@ const panelTitleEl = ref<HTMLElement | null>(null)
 const medallionEls: Partial<Record<DirId, HTMLElement>> = {}
 
 // An extra option inside a direction's card (like steps & sleep in the north)
-type ExtraKey = 'wellness' | 'weight' | 'water' | 'workouts' | 'gratitude' | 'astronomy' | 'journal' | 'mood' | 'meditation'
+type ExtraKey = 'cycle' | 'budget' | 'savings' | 'wellness' | 'weight' | 'water' | 'workouts' | 'gratitude' | 'astronomy' | 'journal' | 'mood' | 'meditation'
 const openExtra = ref<ExtraKey | null>(null)
 const extras = computed<{ key: ExtraKey; icon: string; label: string }[]>(() => {
   switch (openDirection.value?.id) {
@@ -169,7 +172,14 @@ const extras = computed<{ key: ExtraKey; icon: string; label: string }[]>(() => 
       { key: 'water', icon: '💧', label: t('home.waterOption') },
       { key: 'workouts', icon: '🏃', label: t('home.workoutOption') },
     ]
-    case 'e': return [{ key: 'astronomy', icon: '🌙', label: t('home.astronomyOption') }]
+    case 'w': return [
+      { key: 'budget', icon: '💶', label: t('home.budgetOption') },
+      { key: 'savings', icon: '🐷', label: t('home.savingsOption') },
+    ]
+    case 'e': return [
+      { key: 'astronomy', icon: '🌙', label: t('home.astronomyOption') },
+      { key: 'cycle', icon: '🌸', label: t('home.cycleOption') },
+    ]
     case 's': return [
       { key: 'journal', icon: '📓', label: t('home.journalOption') },
       { key: 'mood', icon: '🙂', label: t('home.moodOption') },
@@ -649,6 +659,9 @@ onBeforeUnmount(() => {
 
             <WellnessPanel v-if="openExtra === 'wellness'" :parts="['steps']" />
             <WeightPanel v-if="openExtra === 'weight'" />
+            <CyclePanel v-if="openExtra === 'cycle'" />
+            <BudgetPanel v-if="openExtra === 'budget'" />
+            <SavingsPanel v-if="openExtra === 'savings'" />
             <WaterPanel v-if="openExtra === 'water'" />
             <WorkoutPanel v-if="openExtra === 'workouts'" />
             <GratitudePanel v-if="openExtra === 'gratitude'" />

@@ -1,6 +1,6 @@
 // Moon phases, eclipses and the Sun's seasons, computed in the browser with the algorithms from
 // Jean Meeus, "Astronomical Algorithms" (2nd ed.): ch. 27 (equinoxes and solstices),
-// ch. 49 (phases of the Moon) and ch. 54 (eclipses). Accuracy is a few minutes for 2000-2100,
+// ch. 49 (phases of the Moon) and ch. 54 (eclipses). Accuracy is a few minutes for 1900-2100,
 // which is far more than a calendar needs. All results are absolute instants (JavaScript Dates).
 
 const RAD = Math.PI / 180
@@ -13,6 +13,26 @@ const MS_PER_DAY = 86_400_000
 
 /** Difference between dynamical time (what the formulas give) and UT, in seconds. */
 function deltaT(year: number): number {
+  if (year < 1900) {
+    const t = (year - 1900)
+    return -2.79 + 1.494119 * t - 0.0598939 * t ** 2 + 0.0061966 * t ** 3 - 0.000197 * t ** 4
+  }
+  if (year < 1920) {
+    const t = year - 1900
+    return -2.79 + 1.494119 * t - 0.0598939 * t ** 2 + 0.0061966 * t ** 3 - 0.000197 * t ** 4
+  }
+  if (year < 1941) {
+    const t = year - 1920
+    return 21.2 + 0.84493 * t - 0.0761 * t ** 2 + 0.0020936 * t ** 3
+  }
+  if (year < 1961) {
+    const t = year - 1950
+    return 29.07 + 0.407 * t - t ** 2 / 233 + t ** 3 / 2547
+  }
+  if (year < 1986) {
+    const t = year - 1975
+    return 45.45 + 1.067 * t - t ** 2 / 260 - t ** 3 / 718
+  }
   if (year < 2005) {
     const t = year - 2000
     return 63.86 + 0.3345 * t - 0.060374 * t ** 2 + 0.0017275 * t ** 3 + 0.000651814 * t ** 4 + 0.00002373599 * t ** 5

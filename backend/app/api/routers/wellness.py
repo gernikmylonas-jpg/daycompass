@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/wellness", tags=["wellness"])
 
 MAX_STEPS = 100_000
 MAX_SLEEP_MINUTES = 24 * 60
-EARLIEST_DATE = date(2000, 1, 1)  # sanity floor only; there is no retention limit
+EARLIEST_DATE = date(1900, 1, 1)  # sanity floor only; there is no retention limit
 SUMMARY_DAYS = 14
 
 
@@ -27,7 +27,7 @@ def _resolve_date(requested: date | None) -> date:
     if (day - today).days > 1:  # one day of slack for time zones ahead of the server
         raise HTTPException(status_code=422, detail="Date cannot be in the future")
     if day < EARLIEST_DATE:
-        raise HTTPException(status_code=422, detail="Date cannot be before 2000")
+        raise HTTPException(status_code=422, detail="Date cannot be before 1900")
     return day
 
 

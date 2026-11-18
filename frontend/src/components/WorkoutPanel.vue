@@ -70,7 +70,7 @@ onMounted(load)
           </select>
           <input v-model.number="form.minutes" type="number" min="1" max="600" required :aria-label="t('workouts.minutes')" class="border rounded-lg px-2 py-1.5 text-sm w-24" />
           <span class="self-center text-sm text-slate-600">{{ t('workouts.min') }}</span>
-          <DateField v-model="form.date" min="2000-01-01" :max="today" :label="t('wellness.date')" required />
+          <DateField v-model="form.date" min="1900-01-01" :max="today" :label="t('wellness.date')" required />
         </div>
         <div class="flex gap-2">
           <input v-model="form.note" type="text" maxlength="200" :placeholder="t('workouts.note')" :aria-label="t('workouts.note')" class="flex-1 min-w-0 border rounded-lg px-3 py-1.5 text-sm" />

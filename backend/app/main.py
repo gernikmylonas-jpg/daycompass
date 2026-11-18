@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings as app_config, PUBLIC
 from app.infrastructure.database import Base, engine, SessionLocal, ensure_columns
 from app.domain import models
-from app.api.routers import auth, habits, stats, pomodoro, badges, groups, wellness, reminders, settings, events, journal, mood, meditation, rest_days, challenges, insights, account, calendars, weight, nuggets, goals, wellbeing, quests, photo, group_habits, push
+from app.api.routers import auth, habits, stats, pomodoro, badges, groups, wellness, reminders, settings, events, journal, mood, meditation, rest_days, challenges, insights, account, calendars, weight, nuggets, goals, wellbeing, quests, photo, group_habits, push, money, cycle
 from app.application.services.badges import seed_badges
 
 Base.metadata.create_all(bind=engine)
@@ -40,6 +40,8 @@ app.include_router(quests.router)
 app.include_router(photo.router)
 app.include_router(group_habits.router)
 app.include_router(push.router)
+app.include_router(money.router)
+app.include_router(cycle.router)
 app.include_router(habits.router)
 app.include_router(stats.router)
 app.include_router(pomodoro.router)

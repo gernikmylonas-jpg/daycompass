@@ -12,6 +12,9 @@ describe('Orthodox Easter', () => {
     expect(ymd(orthodoxEaster(2025))).toBe('2025-4-20')
     expect(ymd(orthodoxEaster(2026))).toBe('2026-4-12')
     expect(ymd(orthodoxEaster(2027))).toBe('2027-5-2')
+    expect(ymd(orthodoxEaster(1963))).toBe('1963-4-14') // a year in the 20th century
+    expect(ymd(orthodoxEaster(1999))).toBe('1999-4-11')
+    expect(ymd(orthodoxEaster(2100))).toBe('2100-5-2') // the 13-day gap becomes 14
   })
 })
 

@@ -28,6 +28,7 @@ def ensure_columns() -> None:
         "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS wallpaper VARCHAR",
         "ALTER TABLE profile_photos ADD COLUMN IF NOT EXISTS share_with_groups BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE reminder_settings ADD COLUMN IF NOT EXISTS events_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS end_date DATE",
         "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS quests_on BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS wallpapers_on BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS lid_open BOOLEAN NOT NULL DEFAULT FALSE",

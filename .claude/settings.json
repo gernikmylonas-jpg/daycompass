@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python \"C:/Users/DELL/AppData/Local/Temp/claude/da368a750f96051d/9edea67a-28ec-42e1-80ce-a85229497efa/scratchpad/money_wire.py\")",
+      "Bash(venv/Scripts/python -m alembic revision --autogenerate -m \"money budget savings trips\" --rev-id 0005)",
+      "Bash(python \"C:/Users/DELL/AppData/Local/Temp/claude/da368a750f96051d/9edea67a-28ec-42e1-80ce-a85229497efa/scratchpad/years1900.py\")",
+      "Bash(powershell -c \"cd C:\\\\Users\\\\DELL\\\\source\\\\repos\\\\daycompass\\\\frontend; npx vue-tsc -b 2>&1 | Select-Object -First 10; npx vitest run 2>&1 | Select-Object -Last 30\")",
+      "Bash(python \"C:/Users/DELL/AppData/Local/Temp/claude/da368a750f96051d/9edea67a-28ec-42e1-80ce-a85229497efa/scratchpad/cycle_wire.py\")",
+      "Bash(venv/Scripts/python -m alembic revision --autogenerate -m \"period tracking\" --rev-id 0006)",
+      "Bash(venv/Scripts/python -m pytest -q tests/test_features.py -k \"migrations\")",
+      "Bash(sed -i 's/^HERE = os.path.dirname\\(os.path.abspath\\(__file__\\)\\)/if hasattr\\(sys.stdout, \"reconfigure\"\\):\\\\n    sys.stdout.reconfigure\\(encoding=\"utf-8\"\\)  # Greek text on a Windows console\\\\nHERE = os.path.dirname\\(os.path.abspath\\(__file__\\)\\)/' docs/hidden/build.py)",
+      "Bash(python docs/hidden/build.py)",
+      "Bash(python docs/hidden/build.py --check)",
+      "Bash(echo \"exit $?\")",
+      "Bash(grep -n \"#### \\\\`backend/app/api/routers/habits.py\\\\`\" -A8 docs/hidden/HIDDEN_README.md)",
+      "Bash(python export_conversation.py \"C:/Users/DELL/.claude/projects/c--Users-DELL-source-repos-daycompass/58bae0b1-da7f-4b15-9691-60acb1fda573.jsonl\" CONVERSATION_earlier.md)",
+      "Read(//c/Users/DELL/source/**)"
+    ]
+  }
+}

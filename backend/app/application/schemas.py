@@ -236,6 +236,7 @@ class EventCreate(BaseModel):
     notes: Optional[str] = None
     repeat_yearly: bool = False
     repeat_weekly: bool = False
+    end_date: Optional[date] = None  # last day of a note that lasts several days
 
 
 class EventResponse(BaseModel):
@@ -245,6 +246,7 @@ class EventResponse(BaseModel):
     notes: Optional[str] = None
     repeat_yearly: bool
     repeat_weekly: bool = False
+    end_date: Optional[date] = None  # the last day when it lasts several days (this is the original, not this occurrence's)
     date: date           # the day this occurrence falls on
     original_date: date  # the day it was created for (birthdays repeat every year)
     new_badges: list[BadgeInfo] = []

@@ -148,6 +148,7 @@ async function save() {
   error.value = ''
   message.value = ''
   try {
+    const hadAudio = !!recBlob
     const form = new FormData()
     form.append('entry_date', date.value)
     form.append('content', content.value)
@@ -162,7 +163,7 @@ async function save() {
     content.value = ''
     mood.value = null
     discardRecording()
-    message.value = t('journal.saved')
+    message.value = t(hadAudio ? 'journal.savedAnother' : 'journal.saved')
     await load(true)
   } catch (e) {
     error.value = apiErrorMessage(e)
@@ -258,7 +259,7 @@ onBeforeUnmount(() => {
     <section class="bg-surface rounded-xl shadow p-4 space-y-3 border-t-4 border-purple-500">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="font-bold text-slate-800">{{ t('journal.newEntry') }}</h3>
-        <DateField v-model="date" min="2000-01-01" :max="today" :label="t('wellness.date')" required />
+        <DateField v-model="date" min="1900-01-01" :max="today" :label="t('wellness.date')" required />
       </div>
       <p class="text-xs text-slate-500">{{ t('journal.savesOn', { date: formatDate(date) }) }}</p>
 
@@ -310,7 +311,7 @@ onBeforeUnmount(() => {
       <ul v-if="entries.length" class="divide-y">
         <li v-for="entry in entries" :key="entry.id" class="py-3 text-sm">
           <form v-if="editing && editing.id === entry.id" @submit.prevent="saveEdit" class="space-y-2">
-            <DateField v-model="editing.date" min="2000-01-01" :max="today" :label="t('wellness.date')" required />
+            <DateField v-model="editing.date" min="1900-01-01" :max="today" :label="t('wellness.date')" required />
             <div role="radiogroup" :aria-label="t('journal.mood')" class="flex items-center gap-2">
               <button v-for="m in MOODS" :key="m.id" type="button" role="radio" :aria-checked="editing.mood === m.id"
                 :aria-label="t(`journal.moods.${m.id}`)" @click="editing.mood = editing.mood === m.id ? null : m.id"

@@ -92,8 +92,8 @@ defineExpose({ reload })
         </label>
       </div>
       <div class="flex flex-wrap gap-3 text-xs text-slate-600">
-        <div><span>{{ t('challenges.start') }}</span><DateField v-model="form.start" min="2000-01-01" max="2100-12-31" :label="t('challenges.start')" required class="mt-1" /></div>
-        <div><span>{{ t('challenges.end') }}</span><DateField v-model="form.end" min="2000-01-01" max="2100-12-31" :label="t('challenges.end')" required class="mt-1" /></div>
+        <div><span>{{ t('challenges.start') }}</span><DateField v-model="form.start" min="1900-01-01" max="2100-12-31" :label="t('challenges.start')" required class="mt-1" /></div>
+        <div><span>{{ t('challenges.end') }}</span><DateField v-model="form.end" min="1900-01-01" max="2100-12-31" :label="t('challenges.end')" required class="mt-1" /></div>
       </div>
       <div class="flex gap-2">
         <button type="submit" class="bg-primary text-on-primary rounded-lg px-4 py-1.5 text-sm hover:bg-primary-hover">{{ t('challenges.create') }}</button>

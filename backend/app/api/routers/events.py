@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
@@ -12,11 +12,12 @@ from app.application.services.badges import award_badges
 router = APIRouter(prefix="/api/calendar/events", tags=["calendar"])
 
 KINDS = {"birthday", "reminder", "event", "note"}
-MIN_YEAR, MAX_YEAR = 1900, 2100  # the UI browses 2000-2100; earlier years allow birth dates
+MIN_YEAR, MAX_YEAR = 1900, 2100  # the UI browses 1900-2100
 MAX_RANGE_DAYS = 62
 MAX_TITLE = 100
 MAX_NOTES = 500
 MAX_EVENTS_PER_USER = 2000
+MAX_SPAN_DAYS = 366
 
 
 def _validate(payload: EventCreate) -> tuple[str, str | None]:
@@ -30,6 +31,13 @@ def _validate(payload: EventCreate) -> tuple[str, str | None]:
         raise HTTPException(status_code=422, detail=f"Notes are too long (max {MAX_NOTES} characters)")
     if payload.repeat_yearly and payload.repeat_weekly:
         raise HTTPException(status_code=422, detail="Choose yearly or weekly repeat, not both")
+    if payload.end_date is not None:
+        if payload.end_date < payload.event_date:
+            raise HTTPException(status_code=422, detail="End date must not be before start date")
+        if (payload.end_date - payload.event_date).days + 1 > MAX_SPAN_DAYS:
+            raise HTTPException(status_code=422, detail=f"Range is limited to {MAX_SPAN_DAYS} days")
+        if payload.repeat_weekly:
+            raise HTTPException(status_code=422, detail="A weekly note cannot last several days")
     if payload.kind not in KINDS:
         raise HTTPException(status_code=422, detail="Invalid kind")
     if not MIN_YEAR <= payload.event_date.year <= MAX_YEAR:
@@ -40,7 +48,7 @@ def _validate(payload: EventCreate) -> tuple[str, str | None]:
 def _to_response(e: CalendarEvent, on: date) -> EventResponse:
     return EventResponse(
         id=e.id, title=e.title, kind=e.kind, notes=e.notes,
-        repeat_yearly=e.repeat_yearly, repeat_weekly=e.repeat_weekly, date=on, original_date=e.event_date,
+        repeat_yearly=e.repeat_yearly, repeat_weekly=e.repeat_weekly, end_date=e.end_date, date=on, original_date=e.event_date,
     )
 
 
@@ -85,6 +93,8 @@ def export_ics(user_id: str = Depends(get_current_user_id), db: Session = Depend
                   f"DTSTART;VALUE=DATE:{e.event_date.strftime('%Y%m%d')}", f"SUMMARY:{_ics_text(e.title)}"]
         if e.notes:
             lines.append(f"DESCRIPTION:{_ics_text(e.notes)}")
+        if e.end_date:
+            lines.append(f"DTEND;VALUE=DATE:{(e.end_date + timedelta(days=1)).strftime('%Y%m%d')}")
         if e.repeat_yearly:
             lines.append("RRULE:FREQ=YEARLY")
         elif e.repeat_weekly:
@@ -103,7 +113,7 @@ def create_event(payload: EventCreate, user_id: str = Depends(get_current_user_i
         raise HTTPException(status_code=422, detail="Too many events")
     event = CalendarEvent(
         user_id=user_id, event_date=payload.event_date, title=title, kind=payload.kind,
-        notes=notes, repeat_yearly=payload.repeat_yearly, repeat_weekly=payload.repeat_weekly,
+        notes=notes, repeat_yearly=payload.repeat_yearly, repeat_weekly=payload.repeat_weekly, end_date=payload.end_date,
     )
     db.add(event)
     new_badges = award_badges(db, user_id)
@@ -136,6 +146,7 @@ def update_event(
     event.event_date = payload.event_date
     event.repeat_yearly = payload.repeat_yearly
     event.repeat_weekly = payload.repeat_weekly
+    event.end_date = payload.end_date
     db.commit()
     return _to_response(event, event.event_date)
 
