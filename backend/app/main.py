@@ -1,9 +1,11 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import settings as app_config
+from app.config import settings as app_config, PUBLIC
 from app.infrastructure.database import Base, engine, SessionLocal, ensure_columns
 from app.domain import models
-from app.api.routers import auth, habits, stats, pomodoro, badges, groups, wellness, reminders, settings, events, journal, mood, meditation, rest_days, challenges, insights, account, calendars, weight, nuggets, goals, wellbeing, quests, photo, group_habits
+from app.api.routers import auth, habits, stats, pomodoro, badges, groups, wellness, reminders, settings, events, journal, mood, meditation, rest_days, challenges, insights, account, calendars, weight, nuggets, goals, wellbeing, quests, photo, group_habits, push
 from app.application.services.badges import seed_badges
 
 Base.metadata.create_all(bind=engine)
@@ -12,7 +14,14 @@ ensure_columns()
 with SessionLocal() as _db:
     seed_badges(_db)
 
-app = FastAPI(title="DayCompass API")
+app = FastAPI(title="DayCompass API", docs_url=None if PUBLIC else "/docs", redoc_url=None if PUBLIC else "/redoc", openapi_url=None if PUBLIC else "/openapi.json")
+
+
+@app.exception_handler(IntegrityError)
+async def _conflict(_request, _exc):
+    # two requests raced for the same unique row (a double click): answer with a clean conflict, not a 500
+    return JSONResponse(status_code=409, content={"detail": "Already done"})
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,6 +39,7 @@ app.include_router(wellbeing.router)
 app.include_router(quests.router)
 app.include_router(photo.router)
 app.include_router(group_habits.router)
+app.include_router(push.router)
 app.include_router(habits.router)
 app.include_router(stats.router)
 app.include_router(pomodoro.router)

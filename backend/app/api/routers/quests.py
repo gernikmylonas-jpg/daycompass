@@ -9,6 +9,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.application.services.challenges import member_progress
+from app.application.schemas import BadgeInfo
+from app.application.services.badges import award_badges
 from app.domain.models import QuestReward, WaterLog, Workout
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
@@ -65,5 +67,6 @@ def claim(user_id: str = Depends(get_current_user_id), db: Session = Depends(get
     if not state["done"]:
         raise HTTPException(status_code=422, detail="Quest is not finished yet")
     db.add(QuestReward(user_id=user_id, reward_date=date.today(), quest_id=state["id"]))
+    new_badges = award_badges(db, user_id)
     db.commit()
-    return _state(db, user_id)
+    return {**_state(db, user_id), "new_badges": [BadgeInfo.model_validate(b).model_dump() for b in new_badges]}

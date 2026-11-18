@@ -1,6 +1,13 @@
 # SITE_ADDRESS=:80 serves plain http (home network); a domain name such as app.example.com gets https automatically.
 {$SITE_ADDRESS::80} {
 	encode gzip
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(self), geolocation=(self)"
+		Strict-Transport-Security "max-age=31536000"
+	}
 	handle /api/* {
 		reverse_proxy api:8000
 	}

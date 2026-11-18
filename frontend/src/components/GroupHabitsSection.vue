@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '../api'
 import { apiErrorMessage } from '../i18n/errors'
+import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 
 // Habits the whole group does together (the group streak counts days when everyone did it) and small daily cheers.
 interface Member { user_id: string; name: string; done: boolean }
@@ -11,6 +12,7 @@ interface Cheers { received: { from: string; emoji: string }[]; sent_to: string[
 
 const props = defineProps<{ groupId: string; members: { user_id: string; name: string; is_me: boolean }[] }>()
 const { t } = useI18n()
+const badges = useBadgesStore()
 const habits = ref<Habit[]>([])
 const cheers = ref<Cheers>({ received: [], sent_to: [], options: [] })
 const name = ref('')
@@ -31,7 +33,8 @@ async function reload() {
 async function act(fn: () => Promise<unknown>) {
   error.value = ''
   try {
-    await fn()
+    const res = (await fn()) as { data?: { new_badges?: BadgeInfo[] } } | undefined
+    await badges.announce(res?.data?.new_badges)
     await reload()
   } catch (e) {
     error.value = apiErrorMessage(e)

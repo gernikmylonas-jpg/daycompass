@@ -206,6 +206,7 @@ class WellnessSummary(BaseModel):
 
 class ReminderSettings(BaseModel):
     enabled: bool
+    events_enabled: bool = False
     language: str = "en"
 
 

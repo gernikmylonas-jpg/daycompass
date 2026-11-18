@@ -127,7 +127,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const depth3d = ref(read(DEPTH_KEY) === 'on')
   const questsOn = ref(read(QUESTS_KEY) === 'on')
   const wallpapersOn = ref(read(WALL_ON_KEY) === 'on')
-  const wallpaper = ref<string | null>(read(WALL_KEY))
+  const wallpaper = ref<string | null>(read(WALL_KEY) || null)
   const lidAnimation = ref(read(LID_KEY) === 'on')
   const storedBright = Number(read(BRIGHT_KEY))
   const brightness = ref(storedBright >= BRIGHTNESS_MIN && storedBright <= BRIGHTNESS_MAX ? storedBright : 100)

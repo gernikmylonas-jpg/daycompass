@@ -8,7 +8,7 @@ from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id, verify_password
 from app.application.services.group_cleanup import drop_group_extras
 from app.domain.models import (
-    WeightLog, WeightProfile, WallpaperUnlock, Goal, WaterLog, Workout, GratitudeEntry, QuestReward, ProfilePhoto, GroupHabit, GroupHabitCheck, Cheer,
+    WeightLog, WeightProfile, WallpaperUnlock, Goal, WaterLog, Workout, GratitudeEntry, QuestReward, ProfilePhoto, GroupHabit, GroupHabitCheck, Cheer, PushSubscription, PushLog,
     User, Habit, CheckIn, PomodoroSession, StepLog, SleepLog, MoodLog, MeditationSession, JournalEntry, JournalAudio,
     CalendarEvent, RestDay, UserBadge, Badge, UserSettings, ReminderSetting, ReminderLog, EventMailLog, JournalLock,
     Group, GroupMember, Challenge,
@@ -88,6 +88,7 @@ def export_data(
         "gratitude": [{"date": g.entry_date, "text": g.text} for g in db.query(GratitudeEntry).filter(GratitudeEntry.user_id == user_id)],
         "quests_completed": [{"date": q.reward_date, "quest": q.quest_id} for q in db.query(QuestReward).filter(QuestReward.user_id == user_id)],
         "has_profile_photo": db.query(ProfilePhoto).filter(ProfilePhoto.user_id == user_id).first() is not None,
+        "push_devices": db.query(PushSubscription).filter(PushSubscription.user_id == user_id).count(),
         "rest_days": [r.rest_date for r in db.query(RestDay).filter(RestDay.user_id == user_id)],
         "badges": [{"code": code, "awarded_at": at} for code, at in
                    db.query(Badge.code, UserBadge.awarded_at).join(UserBadge, UserBadge.badge_id == Badge.id).filter(UserBadge.user_id == user_id)],
@@ -132,7 +133,7 @@ def delete_user_data(db: Session, user_id) -> None:
     if habit_ids:
         db.query(CheckIn).filter(CheckIn.habit_id.in_(habit_ids)).delete(synchronize_session=False)
     for model in (JournalEntry, Habit, MoodLog, MeditationSession, CalendarEvent, StepLog, SleepLog, PomodoroSession,
-                  RestDay, WeightLog, WeightProfile, WallpaperUnlock, Goal, WaterLog, Workout, GratitudeEntry, QuestReward, ProfilePhoto, UserBadge, UserSettings, ReminderSetting, ReminderLog, EventMailLog, JournalLock, GroupMember):
+                  RestDay, WeightLog, WeightProfile, WallpaperUnlock, Goal, WaterLog, Workout, GratitudeEntry, QuestReward, ProfilePhoto, PushSubscription, PushLog, UserBadge, UserSettings, ReminderSetting, ReminderLog, EventMailLog, JournalLock, GroupMember):
         db.query(model).filter(model.user_id == user_id).delete(synchronize_session=False)
     db.query(User).filter(User.id == user_id).delete(synchronize_session=False)
     db.commit()

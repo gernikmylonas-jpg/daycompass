@@ -9,6 +9,7 @@ from app.infrastructure.security import get_current_user_id
 from app.domain.models import JournalEntry, JournalAudio, JournalLock
 from app.application.schemas import JournalEntryResponse, JournalPage, JournalUpdate, BadgeInfo
 from app.application.services.badges import award_badges
+from app.application.services.ratelimit import journal_pins
 from app.application.services.journal_crypto import (
     MIN_PIN, MAX_PIN, new_salt, make_cipher, make_check, is_correct,
 )
@@ -31,9 +32,12 @@ def get_cipher(db: Session, user_id: str, pin: str | None) -> Fernet | None:
         return None
     if not pin:
         raise HTTPException(status_code=423, detail="Journal is locked")
+    journal_pins.check(str(user_id))
     cipher = make_cipher(pin, lock.salt)
     if not is_correct(cipher, lock.check_token):
+        journal_pins.fail(str(user_id))
         raise HTTPException(status_code=403, detail="Wrong journal PIN")
+    journal_pins.reset(str(user_id))
     return cipher
 
 
@@ -154,10 +158,17 @@ def _own(db: Session, entry_id: UUID, user_id: str) -> JournalEntry:
 
 
 @router.get("/days")
-def journal_days(start: date, end: date, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    """For a calendar: per day, how many entries and how many voice recordings exist. Counts only, never the content."""
-    if end < start or (end - start).days > 366:
+def journal_days(
+    start: date, end: date, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db),
+    x_journal_pin: str | None = Header(default=None),
+):
+    """For a calendar: per day, how many entries and how many voice recordings exist. Counts only, never the content.
+    A locked journal stays locked: without the right PIN even these counts are refused."""
+    get_cipher(db, user_id, x_journal_pin)
+    if end < start:
         raise HTTPException(status_code=422, detail="End date must not be before start date")
+    if (end - start).days > 366:
+        raise HTTPException(status_code=422, detail="Range is limited to 366 days")
     rows = (
         db.query(JournalEntry.entry_date, JournalEntry.id, JournalAudio.entry_id)
         .outerjoin(JournalAudio, JournalAudio.entry_id == JournalEntry.id)

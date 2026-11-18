@@ -5,6 +5,7 @@ import { apiErrorMessage } from '../i18n/errors'
 import { formatDate } from '../i18n/dates'
 import { useNuggetsStore } from '../stores/nuggets'
 import { useSettingsStore } from '../stores/settings'
+import { useBadgesStore } from '../stores/badges'
 import NuggetIcon from './NuggetIcon.vue'
 import WallpaperArt from './WallpaperArt.vue'
 
@@ -12,6 +13,7 @@ import WallpaperArt from './WallpaperArt.vue'
 const { t } = useI18n()
 const nuggets = useNuggetsStore()
 const settings = useSettingsStore()
+const badges = useBadgesStore()
 const error = ref('')
 const busy = ref('')
 
@@ -22,7 +24,7 @@ async function buy(id: string) {
   error.value = ''
   busy.value = id
   try {
-    await nuggets.unlock(id)
+    await badges.announce(await nuggets.unlock(id))
     settings.wallpaper = id // use it straight away
     settings.wallpapersOn = true
   } catch (e) {

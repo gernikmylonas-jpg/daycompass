@@ -2,7 +2,7 @@
 // to bring events from another calendar app into DayCompass. Anything else in the file is ignored.
 export interface IcsEvent { title: string; date: string; notes: string | null; yearly: boolean; weekly: boolean }
 
-const unescapeText = (s: string) => s.replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1')
+const unescapeText = (s: string) => s.replace(/\\([nN,;\\])/g, (_m, c: string) => (c === 'n' || c === 'N' ? '\n' : c))
 
 export function parseIcs(text: string): IcsEvent[] {
   // lines that start with a space or tab continue the previous one

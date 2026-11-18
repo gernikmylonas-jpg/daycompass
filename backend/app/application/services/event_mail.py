@@ -21,13 +21,13 @@ TEMPLATES = {
 
 
 def send_event_mails(db: Session, today: date | None = None) -> dict:
-    """E-mails the users who turned reminders on a list of today's calendar notes (birthdays
+    """E-mails the users who turned the calendar-notes e-mail on a list of today's calendar notes (birthdays
     included). Safe to re-run: each user gets at most one such e-mail per day."""
     today = today or date.today()
     rows = (
         db.query(User, ReminderSetting)
         .join(ReminderSetting, ReminderSetting.user_id == User.id)
-        .filter(ReminderSetting.enabled.is_(True))
+        .filter(ReminderSetting.events_enabled.is_(True))
         .all()
     )
     already = {uid for (uid,) in db.query(EventMailLog.user_id).filter(EventMailLog.sent_on == today)}

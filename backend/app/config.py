@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
     mail_from: str = "DayCompass <no-reply@daycompass.local>"
     app_url: str = "http://localhost:5173"
+    # Web push. Create the pair with `python scripts/make-vapid-keys.py`; without them push stays off.
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:admin@example.com"
     # Browsers allowed to call the API from another address (comma-separated). Not needed when a reverse proxy
     # serves the site and /api from the same address.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
@@ -32,3 +36,8 @@ class Settings(BaseSettings):
         env_file = ".env"
 
 settings = Settings()
+
+DEFAULT_SECRET = "REPLACE_WITH_A_LONG_RANDOM_SECRET"
+PUBLIC = settings.app_url.startswith("https://")  # a real https address means this is not a local development setup
+if PUBLIC and (settings.jwt_secret == DEFAULT_SECRET or len(settings.jwt_secret) < 32):
+    raise RuntimeError("Set JWT_SECRET to a long random value (32+ characters) before running on a public address")

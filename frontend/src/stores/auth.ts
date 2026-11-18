@@ -1,3 +1,4 @@
+import { clearAvatars } from '../avatarCache'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '../api'
@@ -32,6 +33,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function logout() {
+    clearAvatars()
     token.value = null
     user.value = null
     localStorage.removeItem('token')

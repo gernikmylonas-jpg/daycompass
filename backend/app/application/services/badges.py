@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.domain.models import (
     Badge, UserBadge, User, Habit, CheckIn, PomodoroSession, StepLog, SleepLog, JournalEntry, JournalAudio,
     MoodLog, MeditationSession, CalendarEvent, Group, GroupMember, RestDay, Challenge, WeightLog,
+    WaterLog, Workout, GratitudeEntry, QuestReward, Goal, WallpaperUnlock, GroupHabitCheck, Cheer,
 )
 from app.application.services.points import STEP_GOAL
 from app.application.services.streaks import compute_streaks
@@ -91,6 +92,22 @@ _NEW = [
     ("steps_streak_7", "Unstoppable", "Reach your step goal 7 days in a row", "🔥"),
     ("weight_first", "On the Scale", "Log your weight for the first time", "⚖️"),
     ("weight_30", "Steady Tracker", "Log your weight on 30 different days", "📈"),
+    ("water_first", "Hydrated", "Reach your water goal (8 glasses) in a day", "💧"),
+    ("water_streak_7", "Well Watered", "Reach your water goal 7 days in a row", "🌊"),
+    ("workout_first", "First Sweat", "Log your first workout", "🏃"),
+    ("workout_10", "Regular", "Log 10 workouts", "💪"),
+    ("workout_1200", "Endurance", "Work out for 20 hours in total", "⏱️"),
+    ("gratitude_first", "Thankful", "Write your first line of gratitude", "🙏"),
+    ("gratitude_30", "Grateful Heart", "Write 30 lines of gratitude", "❤️"),
+    ("quest_first", "Quest Taker", "Complete a daily quest", "🎯"),
+    ("quest_7", "Questmaster", "Complete 7 daily quests", "🗺️"),
+    ("goal_first", "Goal Getter", "Reach one of your own goals before its deadline", "🥅"),
+    ("goal_5", "Relentless", "Reach 5 of your own goals", "🏅"),
+    ("wallpaper_first", "Decorator", "Unlock your first wallpaper", "🖼️"),
+    ("wallpaper_5", "Collector", "Unlock 5 wallpapers", "💎"),
+    ("group_habit_10", "Team Habit", "Check in on shared group habits 10 times", "🤝"),
+    ("cheer_first", "Cheerleader", "Send your first cheer to a group member", "📣"),
+    ("cheer_10", "Biggest Fan", "Send 10 cheers", "🎉"),
 ]
 CATALOG += [{"code": c, "name": n, "description": d, "icon": i} for c, n, d, i in _NEW]
 
@@ -120,6 +137,20 @@ def _challenges_done(db: Session, user_id: str) -> int:
 def _best_goal_run(db: Session, user_id: str) -> int:
     """Longest run of consecutive days on which the step goal was reached."""
     days = {d for (d,) in db.query(StepLog.log_date).filter(StepLog.user_id == user_id, StepLog.steps >= STEP_GOAL)}
+    return compute_streaks(days, date.today())[1]
+
+
+def _goals_done(db: Session, user_id: str) -> int:
+    uid = UUID(str(user_id))
+    done = 0
+    for g in db.query(Goal).filter(Goal.user_id == uid):
+        if member_progress(db, g.metric, [uid], g.start_date, g.end_date).get(uid, 0) >= g.target:
+            done += 1
+    return done
+
+
+def _water_run(db: Session, user_id: str) -> int:
+    days = {d for (d,) in db.query(WaterLog.log_date).filter(WaterLog.user_id == user_id, WaterLog.glasses >= 8)}
     return compute_streaks(days, date.today())[1]
 
 
@@ -170,6 +201,16 @@ def _stats(db: Session, user_id: str) -> dict:
         .filter(PomodoroSession.user_id == user_id).scalar() or 0,
         "steps_goal_run": _best_goal_run(db, user_id),
         "weight_days": _count(db, WeightLog.id, WeightLog.user_id == user_id),
+        "water_days": _count(db, WaterLog.id, WaterLog.user_id == user_id, WaterLog.glasses >= 8),
+        "water_run": _water_run(db, user_id),
+        "workouts": _count(db, Workout.id, Workout.user_id == user_id),
+        "workout_minutes": db.query(func.coalesce(func.sum(Workout.minutes), 0)).filter(Workout.user_id == user_id).scalar() or 0,
+        "gratitude": _count(db, GratitudeEntry.id, GratitudeEntry.user_id == user_id),
+        "quests": _count(db, QuestReward.id, QuestReward.user_id == user_id),
+        "goals_done": _goals_done(db, user_id),
+        "wallpapers": _count(db, WallpaperUnlock.id, WallpaperUnlock.user_id == user_id),
+        "group_checks": _count(db, GroupHabitCheck.id, GroupHabitCheck.user_id == user_id),
+        "cheers": _count(db, Cheer.id, Cheer.from_user == user_id),
         "steps_days": _count(db, StepLog.id, StepLog.user_id == user_id, StepLog.points_awarded > 0),
         "steps_max": steps_max,
         "sleep_days": _count(db, SleepLog.id, SleepLog.user_id == user_id, SleepLog.points_awarded > 0),
@@ -265,6 +306,22 @@ RULES = {
     "steps_streak_7": _at_least("steps_goal_run", 7),
     "weight_first": _at_least("weight_days", 1),
     "weight_30": _at_least("weight_days", 30),
+    "water_first": _at_least("water_days", 1),
+    "water_streak_7": _at_least("water_run", 7),
+    "workout_first": _at_least("workouts", 1),
+    "workout_10": _at_least("workouts", 10),
+    "workout_1200": _at_least("workout_minutes", 1200),
+    "gratitude_first": _at_least("gratitude", 1),
+    "gratitude_30": _at_least("gratitude", 30),
+    "quest_first": _at_least("quests", 1),
+    "quest_7": _at_least("quests", 7),
+    "goal_first": _at_least("goals_done", 1),
+    "goal_5": _at_least("goals_done", 5),
+    "wallpaper_first": _at_least("wallpapers", 1),
+    "wallpaper_5": _at_least("wallpapers", 5),
+    "group_habit_10": _at_least("group_checks", 10),
+    "cheer_first": _at_least("cheers", 1),
+    "cheer_10": _at_least("cheers", 10),
 }
 
 

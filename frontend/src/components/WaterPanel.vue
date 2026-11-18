@@ -5,13 +5,14 @@ import api from '../api'
 import { apiErrorMessage } from '../i18n/errors'
 import { intlLocale } from '../i18n'
 import { parseIso, toIso } from '../i18n/dates'
+import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 
 // Glasses of water today (about 250 ml each): tap a glass, or use + and −. Nothing is saved until you tap.
 interface Water { goal: number; today: number; goal_streak: number; days: { date: string; glasses: number | null }[] }
 const { t, locale } = useI18n()
 const data = ref<Water | null>(null)
 const error = ref('')
-const today = toIso(new Date())
+const badges = useBadgesStore()
 const loc = computed(() => intlLocale(locale.value))
 
 async function load() {
@@ -24,7 +25,8 @@ async function load() {
 async function set(n: number) {
   error.value = ''
   try {
-    await api.put(`/api/water/${today}`, { glasses: Math.max(0, Math.min(30, n)) })
+    const { data: saved } = await api.put<{ new_badges?: BadgeInfo[] }>(`/api/water/${toIso(new Date())}`, { glasses: Math.max(0, Math.min(30, n)) })
+    await badges.announce(saved.new_badges)
     await load()
   } catch (e) {
     error.value = apiErrorMessage(e)

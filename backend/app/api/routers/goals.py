@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.application.services.challenges import METRICS, member_progress
+from app.application.services.badges import award_badges
 from app.domain.models import Goal
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
@@ -49,7 +50,10 @@ def _out(db: Session, g: Goal, user_id: str) -> dict:
 @router.get("")
 def list_goals(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     goals = db.query(Goal).filter(Goal.user_id == user_id).order_by(Goal.end_date).all()
-    return [_out(db, g, user_id) for g in goals]
+    out = [_out(db, g, user_id) for g in goals]
+    award_badges(db, user_id)  # reaching a goal earns its badge the next time goals are looked at
+    db.commit()
+    return out
 
 
 @router.post("")

@@ -4,10 +4,12 @@ import { useI18n } from 'vue-i18n'
 import api from '../api'
 import { apiErrorMessage } from '../i18n/errors'
 import { formatDate } from '../i18n/dates'
+import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 
 // A few lines of gratitude each evening (up to five a day). They are yours alone and only exist once you write them.
 interface Item { id: string; date: string; text: string }
 const { t } = useI18n()
+const badges = useBadgesStore()
 const items = ref<Item[]>([])
 const total = ref(0)
 const text = ref('')
@@ -32,7 +34,8 @@ async function add() {
   error.value = ''
   if (!text.value.trim()) return
   try {
-    await api.post('/api/gratitude', { text: text.value })
+    const { data: saved } = await api.post<{ new_badges?: BadgeInfo[] }>('/api/gratitude', { text: text.value })
+    await badges.announce(saved.new_badges)
     text.value = ''
     await load()
   } catch (e) {

@@ -162,6 +162,7 @@ def leave_group(group_id: UUID, user_id: str = Depends(get_current_user_id), db:
         .first()
     )
     if remaining is None:
+        drop_group_extras(db, group.id)
         db.delete(group)
     elif str(group.owner_id) == str(user_id):
         group.owner_id = remaining.user_id

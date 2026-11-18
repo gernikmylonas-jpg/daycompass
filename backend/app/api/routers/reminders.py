@@ -14,7 +14,7 @@ def get_settings(user_id: str = Depends(get_current_user_id), db: Session = Depe
     setting = db.query(ReminderSetting).filter(ReminderSetting.user_id == user_id).first()
     if setting is None:
         return ReminderSettings(enabled=False, language=DEFAULT_LANGUAGE)
-    return ReminderSettings(enabled=setting.enabled, language=setting.language)
+    return ReminderSettings(enabled=setting.enabled, events_enabled=setting.events_enabled, language=setting.language)
 
 
 @router.put("", response_model=ReminderSettings)
@@ -31,6 +31,7 @@ def update_settings(
         setting = ReminderSetting(user_id=user_id)
         db.add(setting)
     setting.enabled = payload.enabled
+    setting.events_enabled = payload.events_enabled
     setting.language = payload.language
     db.commit()
-    return ReminderSettings(enabled=setting.enabled, language=setting.language)
+    return ReminderSettings(enabled=setting.enabled, events_enabled=setting.events_enabled, language=setting.language)

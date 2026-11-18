@@ -42,10 +42,11 @@ def put_settings(
         raise HTTPException(status_code=422, detail="Invalid mood style")
     if payload.calendar_prefs is not None and len(payload.calendar_prefs) > 2000:
         raise HTTPException(status_code=422, detail="Invalid calendar preferences")
-    if payload.wallpaper is not None and not db.query(WallpaperUnlock).filter(
+    if payload.wallpaper and not db.query(WallpaperUnlock).filter(
         WallpaperUnlock.user_id == user_id, WallpaperUnlock.wallpaper_id == payload.wallpaper
     ).first():
-        raise HTTPException(status_code=422, detail="Wallpaper is not unlocked")
+        payload.wallpaper = None  # not unlocked on this account: ignore the choice, keep saving everything else
+    payload.wallpaper = payload.wallpaper or None
     if not 50 <= payload.brightness <= 150:
         raise HTTPException(status_code=422, detail="Invalid brightness")
 

@@ -168,7 +168,7 @@ def test_journal_lock_encrypts_at_rest_and_needs_the_pin(db, user, other):
 def test_calendar_notes_email_is_sent_once_a_day_to_opted_in_users(db, user, other, monkeypatch):
     sent = []
     monkeypatch.setattr(event_mail, "send_email", lambda to, subject, body: sent.append((to, subject, body)) or True)
-    user.put("/api/reminders", json={"enabled": True, "language": "fr"})
+    user.put("/api/reminders", json={"enabled": False, "events_enabled": True, "language": "fr"})
     user.post("/api/calendar/events", json={"title": "Anniversaire de Léa", "event_date": f"{TODAY.year - 30}-{TODAY.month:02d}-{TODAY.day:02d}",
                                             "kind": "birthday", "repeat_yearly": True})
     other.post("/api/calendar/events", json={"title": "Not opted in", "event_date": str(TODAY)})  # reminders are off for them
@@ -227,7 +227,7 @@ def test_weight_trend_goal_and_privacy(user, other):
     from datetime import date, timedelta
     today = date.today()
     assert user.put(f"/api/weight/{today}", json={"kg": 5}).status_code == 422
-    assert user.put(f"/api/weight/{today + timedelta(days=1)}", json={"kg": 70}).status_code == 422
+    assert user.put(f"/api/weight/{today + timedelta(days=3)}", json={"kg": 70}).status_code == 422
     for i, kg in enumerate([80.0, 79.6, 79.2, 79.0, 78.6, 78.4, 78.0, 77.5, 77.0, 76.0]):  # one a day, oldest first
         user.put(f"/api/weight/{today - timedelta(days=9 - i)}", json={"kg": kg})
     user.put("/api/weight/profile", json={"height_cm": 180, "goal_kg": 72.5, "unit": "lb", "show_bmi": True})
@@ -280,7 +280,8 @@ def test_nuggets_economy_and_wallpapers(user):
     assert user.get("/api/auth/me").json()["total_points"] == 127  # spending never touches points
 
     base = {"theme": "classic", "mode": "light", "needle_cursor": True, "language": "en"}
-    assert user.put("/api/settings", json={**base, "wallpaper": "forest", "wallpapers_on": True}).status_code == 422  # locked
+    assert user.put("/api/settings", json={**base, "wallpaper": "forest", "wallpapers_on": True}).json()["wallpaper"] is None  # locked: ignored, not an error
+    assert user.put("/api/settings", json={**base, "wallpaper": "", "wallpapers_on": True}).status_code == 200
     ok = user.put("/api/settings", json={**base, "wallpaper": "topo", "wallpapers_on": True}).json()
     assert ok["wallpaper"] == "topo" and ok["wallpapers_on"] is True
     assert user.get("/api/account/export").json()["wallpapers_unlocked"][0]["id"] == "topo"
@@ -468,3 +469,159 @@ def test_group_shared_habit_streak_and_cheers(user, other):
 
     assert other.delete(f"{base}/habits/{h['id']}").status_code == 200
     assert user.get(f"{base}/habits").json() == []
+
+
+def test_review_fixes(user, other):
+    from datetime import date, timedelta
+    # the last member leaving a group with shared habits and cheers works (no foreign-key error)
+    g = user.post("/api/groups", json={"name": "Solo"}).json()
+    user.post(f"/api/groups/{g['id']}/habits", json={"name": "Stretch"})
+    assert user.delete(f"/api/groups/{g['id']}/members/me").status_code == 200
+    # a day ahead (a time zone ahead of the server) is accepted, three days ahead is not
+    tomorrow = date.today() + timedelta(days=1)
+    assert user.put(f"/api/water/{tomorrow}", json={"glasses": 2}).status_code == 200
+    assert user.put(f"/api/water/{date.today() + timedelta(days=3)}", json={"glasses": 2}).status_code == 422
+    # a locked journal also hides its day counts
+    user.post("/api/journal", data={"entry_date": str(date.today()), "content": "x"})
+    user.post("/api/journal/lock", json={"pin": "1234"})
+    r = user.get("/api/journal/days", params={"start": str(date.today()), "end": str(date.today())})
+    assert r.status_code == 423
+    ok = user.get("/api/journal/days", params={"start": str(date.today()), "end": str(date.today())}, headers={"X-Journal-Pin": "1234"})
+    assert ok.status_code == 200 and ok.json()[0]["entries"] == 1
+
+
+def test_ics_export_is_valid(user):
+    long = "Ελληνικό κείμενο " * 12
+    user.post("/api/calendar/events", json={"title": "Line\r\nbreak", "event_date": "2026-03-02", "notes": long})
+    body = user.get("/api/calendar/events/ics").text
+    lines = body.split("\r\n")
+    assert all(len(l.encode("utf-8")) <= 75 for l in lines)  # folded
+    assert "SUMMARY:Line\\nbreak" in body  # the carriage return became an escaped newline, not a raw break
+    unfolded = body.replace("\r\n ", "")
+    assert long.strip() in unfolded.replace("\\,", ",")
+
+
+def test_repeated_wrong_passwords_and_pins_are_slowed_down(user):
+    from app.application.services import ratelimit
+    email = f"limit_{__import__('uuid').uuid4().hex[:8]}@t.io"
+    user.client.post("/api/auth/register", json={"name": "L", "email": email, "password": "password123"})
+    for _ in range(8):
+        assert user.client.post("/api/auth/login", json={"email": email, "password": "wrong-password"}).status_code == 401
+    assert user.client.post("/api/auth/login", json={"email": email, "password": "wrong-password"}).status_code == 429
+    assert user.client.post("/api/auth/login", json={"email": email, "password": "password123"}).status_code == 429  # even the right one waits
+    ratelimit.logins.reset(email)
+    assert user.client.post("/api/auth/login", json={"email": email, "password": "password123"}).status_code == 200
+
+    user.post("/api/journal/lock", json={"pin": "1234"})
+    for _ in range(8):
+        assert user.get("/api/journal", headers={"X-Journal-Pin": "0000"}).status_code == 403
+    assert user.get("/api/journal", headers={"X-Journal-Pin": "1234"}).status_code == 429
+
+
+def test_migrations_build_the_same_schema_as_the_models():
+    """A new database made with `alembic upgrade head` must equal what the models describe (no forgotten migration)."""
+    import psycopg2
+    from alembic import command
+    from alembic.config import Config
+    from pathlib import Path
+    from sqlalchemy.engine import make_url
+    from app.config import settings
+    url = make_url(settings.database_url)
+    admin = psycopg2.connect(dbname="postgres", user=url.username, password=url.password, host=url.host, port=url.port or 5432)
+    admin.autocommit = True
+    cur = admin.cursor()
+    cur.execute("DROP DATABASE IF EXISTS daycompass_migtest")
+    cur.execute("CREATE DATABASE daycompass_migtest")
+    original = settings.database_url
+    try:
+        settings.database_url = url.set(database="daycompass_migtest").render_as_string(hide_password=False)
+        cfg = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+        command.upgrade(cfg, "head")
+        command.check(cfg)  # raises if the models have changes no migration covers
+    finally:
+        settings.database_url = original
+        cur.execute("DROP DATABASE IF EXISTS daycompass_migtest")
+        admin.close()
+
+
+def test_new_badges_are_earned_by_the_new_features(user, other):
+    from datetime import date, timedelta
+    today = date.today()
+    earned = lambda: {b["code"] for b in user.get("/api/badges").json() if b.get("earned")}
+    w = user.put(f"/api/water/{today}", json={"glasses": 8}).json()
+    assert [b["code"] for b in w["new_badges"]] == ["water_first"]
+    assert [b["code"] for b in user.post("/api/workouts", json={"kind": "run", "minutes": 30}).json()["new_badges"]] == ["workout_first"]
+    assert [b["code"] for b in user.post("/api/gratitude", json={"text": "tea"}).json()["new_badges"]] == ["gratitude_first"]
+    # a goal reached: the badge appears the next time goals are listed
+    user.post("/api/goals", json={"title": "Move", "metric": "steps", "target": 100, "start_date": str(today), "end_date": str(today + timedelta(days=2))})
+    user.put("/api/wellness/steps", json={"steps": 500})
+    user.get("/api/goals")
+    assert "goal_first" in earned()
+    # group things
+    g = user.post("/api/groups", json={"name": "Crew"}).json()
+    other.post("/api/groups/join", json={"invite_code": g["invite_code"]})
+    h = user.post(f"/api/groups/{g['id']}/habits", json={"name": "Walk"}).json()
+    user.post(f"/api/groups/{g['id']}/habits/{h['id']}/check")
+    other_id = other.get("/api/auth/me").json()["id"]
+    sent = user.post(f"/api/groups/{g['id']}/cheers", json={"to_user_id": other_id, "emoji": "👏"}).json()
+    assert [b["code"] for b in sent["new_badges"]] == ["cheer_first"]
+    # wallpapers
+    from app.infrastructure.database import SessionLocal
+    from app.domain.models import User
+    me = user.get("/api/auth/me").json()["id"]
+    db = SessionLocal(); db.query(User).filter(User.id == me).update({User.total_points: 500}); db.commit(); db.close()
+    un = user.post("/api/nuggets/wallpapers/topo/unlock").json()
+    assert "wallpaper_first" in [b["code"] for b in un["new_badges"]]
+    assert {"water_first", "workout_first", "gratitude_first", "goal_first", "cheer_first", "wallpaper_first"} <= earned()
+
+
+def test_push_subscriptions_and_reminder_job(user, other, monkeypatch):
+    from datetime import date
+    from app.application.services import push as push_service
+    from app.application.services.push import send_push_reminders
+    from app.infrastructure.database import SessionLocal
+    from app.config import settings
+
+    assert user.get("/api/push/key").json() == {"enabled": False, "public_key": None}  # not set up: everything stays off
+    sub = {"endpoint": "https://push.example.test/abc", "keys": {"p256dh": "k", "auth": "a"}}
+    assert user.post("/api/push/subscribe", json=sub).status_code == 503
+
+    monkeypatch.setattr(settings, "vapid_public_key", "PUB")
+    monkeypatch.setattr(settings, "vapid_private_key", "PRIV")
+    assert user.get("/api/push/key").json() == {"enabled": True, "public_key": "PUB"}
+    assert user.post("/api/push/subscribe", json={**sub, "endpoint": "http://insecure"}).status_code == 422
+    assert user.post("/api/push/subscribe", json=sub).json() == {"subscribed": True}
+    assert user.post("/api/push/subscribe", json=sub).status_code == 200  # the same device again is fine
+
+    sent = []
+    monkeypatch.setattr(push_service, "send_to_subscription", lambda db, s, payload: sent.append(payload) or True)
+    user.post("/api/habits", json={"name": "Read", "frequency": "daily", "category": "mind"})
+    db = SessionLocal()
+    result = send_push_reminders(db, date.today())
+    assert result["sent"] >= 1 and result["enabled"] is True
+    first = len(sent)
+    assert "habit" in sent[-1]["body"]
+    send_push_reminders(db, date.today())  # at most once a day
+    assert len(sent) == first
+    db.close()
+
+    assert user.post("/api/push/test").json()["sent"] == 1
+    assert other.post("/api/push/unsubscribe", json={"endpoint": sub["endpoint"]}).status_code == 200  # not theirs: nothing happens
+    assert user.post("/api/push/test").json()["sent"] == 1
+    assert user.post("/api/push/unsubscribe", json={"endpoint": sub["endpoint"]}).json() == {"subscribed": False}
+    assert user.post("/api/push/test").json()["sent"] == 0
+
+
+def test_calendar_notes_mail_needs_its_own_switch(user, monkeypatch):
+    from app.application.services import event_mail
+    from app.infrastructure.database import SessionLocal
+    sent = []
+    monkeypatch.setattr(event_mail, "send_email", lambda to, subject, body: sent.append(to) or True)
+    user.post("/api/calendar/events", json={"title": "Dentist", "event_date": str(TODAY)})
+    user.put("/api/reminders", json={"enabled": True, "language": "en"})  # habit reminders on, notes mail NOT chosen
+    db = SessionLocal()
+    assert event_mail.send_event_mails(db, TODAY)["sent"] == 0 and sent == []
+    user.put("/api/reminders", json={"enabled": True, "events_enabled": True, "language": "en"})
+    assert user.get("/api/reminders").json()["events_enabled"] is True
+    assert event_mail.send_event_mails(db, TODAY)["sent"] == 1
+    db.close()

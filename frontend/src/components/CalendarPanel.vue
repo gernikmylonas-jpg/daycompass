@@ -250,7 +250,13 @@ async function importIcs(ev: Event) {
   input.value = ''
   if (!file) return
   error.value = icsMessage.value = ''
-  const found = parseIcs(await file.text()).filter((e) => Number(e.date.slice(0, 4)) >= 1900 && Number(e.date.slice(0, 4)) <= 2100).slice(0, 300)
+  // what is already there (same title on the same day), so importing the same file twice adds nothing new
+  let existing = new Set<string>()
+  try {
+    const { data } = await api.get<Blob>('/api/calendar/events/ics', { responseType: 'blob' })
+    existing = new Set(parseIcs(await data.text()).map((e) => `${e.date}|${e.title.toLowerCase()}`))
+  } catch { /* if this fails, just import everything */ }
+  const found = parseIcs(await file.text()).filter((e) => !existing.has(`${e.date}|${e.title.toLowerCase()}`)).filter((e) => Number(e.date.slice(0, 4)) >= 1900 && Number(e.date.slice(0, 4)) <= 2100).slice(0, 300)
   let added = 0
   for (const e of found) {
     try {

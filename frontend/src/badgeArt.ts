@@ -18,6 +18,8 @@ export const BADGE_GROUPS: { key: BadgeGroup; accent: string; direction: string 
 
 // Line symbols on a 24x24 grid, drawn with currentColor
 export const GLYPHS: Record<string, string> = {
+  drop: '<path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/><path d="M9 15a3 3 0 0 0 3 3"/>',
+  heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
   sprout: '<path d="M12 21v-9"/><path d="M12 12c0-4 3-6 7-6 0 4-3 6-7 6z"/><path d="M12 14c0-3-2.5-5-6-5 0 3 2.5 5 6 5z"/>',
   check: '<circle cx="12" cy="12" r="9"/><path d="M7.5 12.5l3 3 6-6.5"/>',
   target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
@@ -99,6 +101,22 @@ export const BADGE_ART: Record<string, Art> = {
   steps_streak_7: a('body', 'flame', 2),
   weight_first: a('body', 'target', 1),
   weight_30: a('body', 'compass', 2),
+  water_first: a('body', 'drop', 1),
+  water_streak_7: a('body', 'drop', 2),
+  workout_first: a('body', 'dumbbell', 1),
+  workout_10: a('body', 'dumbbell', 2),
+  workout_1200: a('body', 'stopwatch', 3),
+  gratitude_first: a('mind', 'heart', 1),
+  gratitude_30: a('mind', 'heart', 2),
+  quest_first: a('general', 'target', 1),
+  quest_7: a('general', 'map', 2),
+  goal_first: a('general', 'flag', 1),
+  goal_5: a('general', 'trophy', 2),
+  wallpaper_first: a('general', 'gem', 1),
+  wallpaper_5: a('general', 'gem', 3),
+  group_habit_10: a('groups', 'people', 2),
+  cheer_first: a('groups', 'sparkle', 1),
+  cheer_10: a('groups', 'star', 2),
   // north-east: sleep
   sleep_first: a('sleep', 'moon', 1),
   sleep_7: a('sleep', 'bed', 2),

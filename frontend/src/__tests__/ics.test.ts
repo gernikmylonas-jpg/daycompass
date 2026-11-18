@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 import { parseIcs } from '../calendars/ics'
 
 const sample = [
@@ -18,5 +18,10 @@ describe('.ics import', () => {
     expect(events[1]).toMatchObject({ title: 'Gym', date: '2026-03-02', weekly: true, yearly: false, notes: 'Legs\nand core' })
   })
   it('joins folded lines', () => expect(events[2].title).toBe('A very longtitle continues'))
+  it('keeps an escaped backslash before the letter n', () => {
+    const ev = parseIcs(['BEGIN:VEVENT', 'DTSTART;VALUE=DATE:20260101', 'SUMMARY:C:\\\\\\\\new', 'END:VEVENT'].join('\r\n'))
+    expect(ev[0].title).toBe('C:\\\\new')
+  })
   it('survives rubbish', () => expect(parseIcs('hello')).toEqual([]))
 })
+

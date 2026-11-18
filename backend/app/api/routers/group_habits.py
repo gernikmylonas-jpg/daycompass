@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.application.services.realtime import notify_groups
+from app.application.schemas import BadgeInfo
+from app.application.services.badges import award_badges
 from app.domain.models import Cheer, Group, GroupHabit, GroupHabitCheck, GroupMember, User
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
@@ -93,9 +95,10 @@ def check(group_id: UUID, habit_id: UUID, user_id: str = Depends(get_current_use
     if db.query(GroupHabitCheck.id).filter(GroupHabitCheck.habit_id == h.id, GroupHabitCheck.user_id == user_id, GroupHabitCheck.check_date == today).first():
         raise HTTPException(status_code=409, detail="Already checked in today")
     db.add(GroupHabitCheck(habit_id=h.id, user_id=user_id, check_date=today))
+    new_badges = award_badges(db, user_id)
     db.commit()
     notify_groups([group_id])
-    return _habit_view(db, h, people, user_id)
+    return {**_habit_view(db, h, people, user_id), "new_badges": [BadgeInfo.model_validate(b).model_dump() for b in new_badges]}
 
 
 @router.delete("/habits/{habit_id}")
@@ -106,7 +109,7 @@ def delete_habit(group_id: UUID, habit_id: UUID, user_id: str = Depends(get_curr
     if not h:
         raise HTTPException(status_code=404, detail="Habit not found")
     if str(h.created_by) != str(user_id) and str(group.owner_id) != str(user_id):
-        raise HTTPException(status_code=403, detail="Only the owner can delete the group")
+        raise HTTPException(status_code=403, detail="Only the creator or the group owner can delete this habit")
     db.query(GroupHabitCheck).filter(GroupHabitCheck.habit_id == h.id).delete(synchronize_session=False)
     db.delete(h)
     db.commit()
@@ -136,6 +139,7 @@ def send_cheer(group_id: UUID, payload: CheerIn, user_id: str = Depends(get_curr
     if db.query(Cheer.id).filter(Cheer.group_id == group_id, Cheer.from_user == user_id, Cheer.to_user == payload.to_user_id, Cheer.cheer_date == today).first():
         raise HTTPException(status_code=409, detail="You already cheered them today")
     db.add(Cheer(group_id=group_id, from_user=user_id, to_user=payload.to_user_id, emoji=payload.emoji, cheer_date=today))
+    new_badges = award_badges(db, user_id)
     db.commit()
     notify_groups([group_id])
-    return {"detail": "Sent"}
+    return {"detail": "Sent", "new_badges": [BadgeInfo.model_validate(b).model_dump() for b in new_badges]}

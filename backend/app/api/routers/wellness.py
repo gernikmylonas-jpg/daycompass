@@ -24,7 +24,7 @@ SUMMARY_DAYS = 14
 def _resolve_date(requested: date | None) -> date:
     today = date.today()
     day = requested or today
-    if day > today:
+    if (day - today).days > 1:  # one day of slack for time zones ahead of the server
         raise HTTPException(status_code=422, detail="Date cannot be in the future")
     if day < EARLIEST_DATE:
         raise HTTPException(status_code=422, detail="Date cannot be before 2000")

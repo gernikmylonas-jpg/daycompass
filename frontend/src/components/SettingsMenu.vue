@@ -5,7 +5,8 @@ import { THEMES, MODES, BRIGHTNESS_MIN, BRIGHTNESS_MAX, useSettingsStore } from 
 import { radioKeydown } from '../a11y'
 import { RouterLink } from 'vue-router'
 import { useNuggetsStore } from '../stores/nuggets'
-import { offlineEnabled, offlineSupported, setOffline } from '../offline'
+import { offlineEnabled, offlineSupported, setOffline, pushEnabled, pushSupported, enablePush, disablePush } from '../offline'
+import { apiErrorMessage } from '../i18n/errors'
 
 const { t } = useI18n()
 const settings = useSettingsStore()
@@ -13,6 +14,26 @@ const nuggets = useNuggetsStore()
 const offlineOn = ref(offlineEnabled())
 const canOffline = offlineSupported()
 async function toggleOffline() { await setOffline(offlineOn.value) }
+const pushOn = ref(pushEnabled())
+const canPush = pushSupported()
+const pushMessage = ref('')
+async function togglePush() {
+  pushMessage.value = ''
+  try {
+    if (pushOn.value) {
+      const result = await enablePush()
+      if (result !== 'on') {
+        pushOn.value = false
+        pushMessage.value = t(result === 'denied' ? 'settings.pushDenied' : 'settings.pushUnavailable')
+      }
+    } else {
+      await disablePush()
+    }
+  } catch (e) {
+    pushOn.value = false
+    pushMessage.value = apiErrorMessage(e)
+  }
+}
 const unlockedWallpapers = computed(() => nuggets.data?.unlocked ?? [])
 
 const open = ref(false)
@@ -127,6 +148,16 @@ onUnmounted(() => {
             <span class="block text-xs text-slate-500">{{ t('settings.questsHint') }}</span>
           </span>
         </label>
+        <div v-if="canPush">
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input v-model="pushOn" type="checkbox" class="mt-1 h-4 w-4" @change="togglePush" />
+            <span>
+              <span class="block text-sm font-medium text-slate-800">{{ t('settings.push') }}</span>
+              <span class="block text-xs text-slate-500">{{ t('settings.pushHint') }}</span>
+            </span>
+          </label>
+          <p v-if="pushMessage" role="status" class="text-xs text-danger mt-1">{{ pushMessage }}</p>
+        </div>
         <label v-if="canOffline" class="flex items-start gap-3 cursor-pointer">
           <input v-model="offlineOn" type="checkbox" class="mt-1 h-4 w-4" @change="toggleOffline" />
           <span>

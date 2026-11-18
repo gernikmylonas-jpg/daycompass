@@ -6,12 +6,14 @@ import { apiErrorMessage } from '../i18n/errors'
 import { useSettingsStore } from '../stores/settings'
 import { useNuggetsStore } from '../stores/nuggets'
 import NuggetIcon from './NuggetIcon.vue'
+import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 
 // Today's quest: one small challenge, worth one extra gold nugget. Shown only if quests are switched on in Settings.
 interface Quest { id: string; metric: string; target: number; progress: number; done: boolean; claimed: boolean; reward_nuggets: number; completed_total: number }
 const { t, locale } = useI18n()
 const settings = useSettingsStore()
 const nuggets = useNuggetsStore()
+const badges = useBadgesStore()
 const quest = ref<Quest | null>(null)
 const error = ref('')
 const percent = computed(() => (quest.value ? Math.min(100, Math.round((quest.value.progress / quest.value.target) * 100)) : 0))
@@ -28,7 +30,9 @@ async function load() {
 async function claim() {
   error.value = ''
   try {
-    quest.value = (await api.post<Quest>('/api/quests/today/claim')).data
+    const { data } = await api.post<Quest & { new_badges?: BadgeInfo[] }>('/api/quests/today/claim')
+    quest.value = data
+    await badges.announce(data.new_badges)
     await nuggets.fetch()
   } catch (e) {
     error.value = apiErrorMessage(e)

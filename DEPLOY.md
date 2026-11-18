@@ -28,7 +28,17 @@ Static site on Netlify/Vercel/Cloudflare Pages, the API on Fly.io/Render, the da
 Build the site with `VITE_API_URL=https://your-api.example.com`, and set `CORS_ORIGINS=https://your-site.example.com` on the API.
 (The worker/beat need a second small service if you want e-mails.)
 
+## Database migrations and backups
+- The API container runs `python -m app.migrate` at start: a new database gets every table, an existing one is brought up to date
+  (`backend/alembic/versions`). After you change `backend/app/domain/models.py`, create the migration with
+  `cd backend && alembic revision --autogenerate -m "what changed"` and commit it (a test fails if you forget).
+- **Backups** (do this before you rely on it): `scripts/backup-db.sh` on a Linux server (cron it, e.g. `0 3 * * *`) or `scripts/backup-db.ps1` on Windows.
+  `scripts/restore-db.*` puts a file back; try it first into a throw-away database (`-Database daycompass_check`). Copy the files off the server.
+
+## Optional: push notifications
+Generate keys with `cd backend && venv/Scripts/python ../scripts/make-vapid-keys.py`, put the three `VAPID_*` lines in `.env` and restart. Push needs https
+(or localhost). People switch it on themselves in Settings; without keys the option just says it is unavailable.
+
 ## Before real users
-Change `JWT_SECRET`, do not publish the database port, keep `.env` out of git (it already is), and run
-`pytest` and `npm test` (the CI workflow does this on every push). Schema changes still use the built-in
-`ensure_columns`; move to Alembic migrations before you keep data you cannot lose.
+Set `JWT_SECRET` (the API refuses to start on an https address with the placeholder), do not publish the database port, keep `.env` out of git (it already is), and run
+`pytest` and `npm test` (the CI workflow does this on every push). Repeated wrong passwords/PINs are slowed down (429) in the API itself; the web server adds the usual security headers.

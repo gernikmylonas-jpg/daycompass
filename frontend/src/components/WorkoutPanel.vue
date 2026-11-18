@@ -5,6 +5,7 @@ import api from '../api'
 import { apiErrorMessage } from '../i18n/errors'
 import { formatDate, toIso } from '../i18n/dates'
 import DateField from './DateField.vue'
+import { useBadgesStore, type BadgeInfo } from '../stores/badges'
 
 // Log workouts (kind, minutes, optional note). They add up per week and per kind; nothing is created unless you log it.
 interface Item { id: string; date: string; kind: string; minutes: number; note: string | null }
@@ -12,6 +13,7 @@ interface Data { week_minutes: number; week_sessions: number; total_minutes: num
 const KINDS = ['walk', 'run', 'cycle', 'swim', 'gym', 'yoga', 'sport', 'other']
 const ICON: Record<string, string> = { walk: '🚶', run: '🏃', cycle: '🚴', swim: '🏊', gym: '🏋️', yoga: '🧘', sport: '⚽', other: '✨' }
 const { t } = useI18n()
+const badges = useBadgesStore()
 const today = toIso(new Date())
 const data = ref<Data | null>(null)
 const error = ref('')
@@ -31,7 +33,8 @@ async function add() {
   error.value = ''
   if (!form.value.minutes) return
   try {
-    await api.post('/api/workouts', { kind: form.value.kind, minutes: form.value.minutes, workout_date: form.value.date, note: form.value.note || null })
+    const { data: saved } = await api.post<{ new_badges?: BadgeInfo[] }>('/api/workouts', { kind: form.value.kind, minutes: form.value.minutes, workout_date: form.value.date, note: form.value.note || null })
+    await badges.announce(saved.new_badges)
     form.value.note = ''
     await load()
   } catch (e) {

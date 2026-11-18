@@ -183,6 +183,7 @@ class ReminderSetting(Base):
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
     enabled = Column(Boolean, nullable=False, default=False)
+    events_enabled = Column(Boolean, nullable=False, default=False)  # the separate, opt-in e-mail with today's calendar notes
     language = Column(String, nullable=False, default="en")
 
 
@@ -445,3 +446,26 @@ class Cheer(Base):
     to_user = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     emoji = Column(String, nullable=False)
     cheer_date = Column(Date, nullable=False)
+
+
+# ─── Web push (opt-in, per device) ──────────────────────
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    endpoint = Column(String, nullable=False, unique=True)
+    p256dh = Column(String, nullable=False)
+    auth = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class PushLog(Base):
+    """One row per user per day that got the habit push, so re-running the job never sends twice."""
+    __tablename__ = "push_logs"
+    __table_args__ = (UniqueConstraint("user_id", "sent_on", name="uq_push_day"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    sent_on = Column(Date, nullable=False)

@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.application.schemas import BadgeInfo
+from app.application.services.badges import award_badges
 from app.domain.models import GratitudeEntry, WaterLog, Workout
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
@@ -25,7 +27,7 @@ EARLIEST = date(2000, 1, 1)
 
 def _day(d: Optional[date]) -> date:
     d = d or date.today()
-    if d > date.today():
+    if (d - date.today()).days > 1:  # one day of slack for time zones ahead of the server
         raise HTTPException(status_code=422, detail="Date cannot be in the future")
     if d < EARLIEST:
         raise HTTPException(status_code=422, detail="Date cannot be before 2000")
@@ -42,11 +44,10 @@ def water(days: int = Query(14, ge=1, le=366), user_id: str = Depends(get_curren
     since = date.today() - timedelta(days=days - 1)
     rows = {r.log_date: r.glasses for r in db.query(WaterLog).filter(WaterLog.user_id == user_id, WaterLog.log_date >= since)}
     series = [{"date": since + timedelta(days=i), "glasses": rows.get(since + timedelta(days=i))} for i in range(days)]
-    streak, d = 0, date.today() if rows.get(date.today(), 0) >= WATER_GOAL else date.today() - timedelta(days=1)
-    while True:
-        glasses = db.query(WaterLog.glasses).filter(WaterLog.user_id == user_id, WaterLog.log_date == d).scalar()
-        if (glasses or 0) < WATER_GOAL:
-            break
+    met = {d for (d,) in db.query(WaterLog.log_date).filter(
+        WaterLog.user_id == user_id, WaterLog.glasses >= WATER_GOAL, WaterLog.log_date >= date.today() - timedelta(days=400))}
+    streak, d = 0, date.today() if date.today() in met else date.today() - timedelta(days=1)  # today may still be in progress
+    while d in met:
         streak += 1
         d -= timedelta(days=1)
     return {"goal": WATER_GOAL, "today": rows.get(date.today(), 0), "goal_streak": streak, "days": series}
@@ -63,8 +64,9 @@ def set_water(day: date, payload: WaterIn, user_id: str = Depends(get_current_us
         db.add(row)
     else:
         row.glasses = payload.glasses
+    new_badges = award_badges(db, user_id)
     db.commit()
-    return {"date": day, "glasses": row.glasses}
+    return {"date": day, "glasses": row.glasses, "new_badges": [BadgeInfo.model_validate(b).model_dump() for b in new_badges]}
 
 
 # ── workouts ──────────────────────────────────────────────────────────────
@@ -102,8 +104,9 @@ def add_workout(payload: WorkoutIn, user_id: str = Depends(get_current_user_id),
         raise HTTPException(status_code=422, detail="Note is too long (max 200 characters)")
     w = Workout(user_id=user_id, workout_date=_day(payload.workout_date), kind=payload.kind, minutes=payload.minutes, note=note)
     db.add(w)
+    new_badges = award_badges(db, user_id)
     db.commit()
-    return {"id": w.id}
+    return {"id": w.id, "new_badges": [BadgeInfo.model_validate(b).model_dump() for b in new_badges]}
 
 
 @router.delete("/workouts/{workout_id}")
@@ -141,8 +144,9 @@ def add_gratitude(payload: GratitudeIn, user_id: str = Depends(get_current_user_
         raise HTTPException(status_code=422, detail=f"At most {MAX_GRATITUDE_PER_DAY} entries a day")
     g = GratitudeEntry(user_id=user_id, entry_date=day, text=text)
     db.add(g)
+    new_badges = award_badges(db, user_id)
     db.commit()
-    return {"id": g.id}
+    return {"id": g.id, "new_badges": [BadgeInfo.model_validate(b).model_dump() for b in new_badges]}
 
 
 @router.delete("/gratitude/{entry_id}")

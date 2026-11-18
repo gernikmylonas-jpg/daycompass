@@ -1,3 +1,4 @@
+from app.application.services.ratelimit import logins
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_db
@@ -35,9 +36,13 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=AuthResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    key = payload.email.strip().lower()
+    logins.check(key)
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.password_hash):
+        logins.fail(key)
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    logins.reset(key)
 
     token = create_access_token(str(user.id))
     return AuthResponse(token=token, user=user)

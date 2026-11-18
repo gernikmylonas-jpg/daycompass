@@ -19,7 +19,7 @@ def put_mood(payload: MoodUpsert, user_id: str = Depends(get_current_user_id), d
         raise HTTPException(status_code=422, detail="Score must be between 1 and 10")
     today = date.today()
     day = payload.log_date or today
-    if day > today:
+    if (day - today).days > 1:  # one day of slack for time zones ahead of the server
         raise HTTPException(status_code=422, detail="Date cannot be in the future")
     if (today - day).days > MAX_BACKFILL_DAYS:
         raise HTTPException(status_code=422, detail=f"Date cannot be older than {MAX_BACKFILL_DAYS} days")

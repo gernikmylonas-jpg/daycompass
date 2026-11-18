@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '../api'
+import type { BadgeInfo } from './badges'
 
 export interface WallpaperItem { id: string; cost: number; theme: string }
 export interface Unlock { id: string; cost: number; unlocked_at: string }
@@ -22,7 +23,9 @@ export const useNuggetsStore = defineStore('nuggets', () => {
   }
 
   async function unlock(id: string) {
-    data.value = (await api.post<Nuggets>(`/api/nuggets/wallpapers/${id}/unlock`)).data
+    const res = (await api.post<Nuggets & { new_badges?: BadgeInfo[] }>(`/api/nuggets/wallpapers/${id}/unlock`)).data
+    data.value = res
+    return res.new_badges ?? []
   }
 
   const isUnlocked = (id: string) => !!data.value?.unlocked.some((u) => u.id === id)

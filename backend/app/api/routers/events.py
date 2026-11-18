@@ -59,7 +59,21 @@ def list_events(
 
 
 def _ics_text(value: str) -> str:
-    return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+    return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\r\n", "\\n").replace("\r", "\\n").replace("\n", "\\n")
+
+
+def _fold(line: str) -> list[str]:
+    """RFC 5545: lines are at most 75 octets; longer ones continue on the next line after a space (never inside a character)."""
+    out, cur, size = [], "", 0
+    for ch in line:
+        n = len(ch.encode("utf-8"))
+        if size + n > (75 if not out else 74):
+            out.append(cur)
+            cur, size = "", 0
+        cur += ch
+        size += n
+    out.append(cur)
+    return [out[0]] + [" " + x for x in out[1:]]
 
 
 @router.get("/ics")
@@ -77,7 +91,8 @@ def export_ics(user_id: str = Depends(get_current_user_id), db: Session = Depend
             lines.append("RRULE:FREQ=WEEKLY")
         lines.append("END:VEVENT")
     lines.append("END:VCALENDAR")
-    return Response("\r\n".join(lines) + "\r\n", media_type="text/calendar",
+    folded = [part for line in lines for part in _fold(line)]
+    return Response("\r\n".join(folded) + "\r\n", media_type="text/calendar",
                     headers={"Content-Disposition": 'attachment; filename="daycompass.ics"'})
 
 

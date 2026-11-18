@@ -1,22 +1,20 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
 import api from '../api'
+import { cachedAvatar, rememberAvatar } from '../avatarCache'
 
 // A round picture: the member's photo if they chose to share one with their groups, otherwise their initial.
 const props = withDefaults(defineProps<{ userId: string; name: string; has: boolean; size?: number }>(), { size: 32 })
-const cache = (globalThis as { __avatarCache?: Map<string, string> }).__avatarCache ??= new Map<string, string>()
 const url = ref<string | null>(null)
 const initial = computed(() => (props.name.trim()[0] ?? '?').toUpperCase())
 
 async function load() {
   if (!props.has) { url.value = null; return }
-  const hit = cache.get(props.userId)
+  const hit = cachedAvatar(props.userId)
   if (hit) { url.value = hit; return }
   try {
     const { data } = await api.get<Blob>(`/api/profile-photo/user/${props.userId}`, { responseType: 'blob' })
-    const made = URL.createObjectURL(data)
-    cache.set(props.userId, made)
-    url.value = made
+    url.value = rememberAvatar(props.userId, data)
   } catch {
     url.value = null
   }

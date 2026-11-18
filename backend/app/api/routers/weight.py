@@ -60,7 +60,7 @@ def put_profile(payload: ProfileIn, user_id: str = Depends(get_current_user_id),
 def log_weight(day: date, payload: WeightIn, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     if not MIN_KG <= payload.kg <= MAX_KG:
         raise HTTPException(status_code=422, detail=f"Weight must be between {int(MIN_KG)} and {int(MAX_KG)} kg")
-    if day > date.today():
+    if (day - date.today()).days > 1:  # one day of slack for time zones ahead of the server
         raise HTTPException(status_code=422, detail="Date cannot be in the future")
     if day < EARLIEST:
         raise HTTPException(status_code=422, detail="Date cannot be before 2000")

@@ -352,12 +352,14 @@ async function remove(habit: Habit) {
 }
 
 const reminderEnabled = ref(false)
+const eventsMailEnabled = ref(false)
 const reminderReady = ref(false)
 
 async function loadReminder() {
   try {
-    const { data } = await api.get<{ enabled: boolean; language: string }>('/api/reminders')
+    const { data } = await api.get<{ enabled: boolean; events_enabled?: boolean; language: string }>('/api/reminders')
     reminderEnabled.value = data.enabled
+    eventsMailEnabled.value = !!data.events_enabled
   } catch {
     // reminders are optional; leave the toggle off
   } finally {
@@ -367,7 +369,7 @@ async function loadReminder() {
 
 async function saveReminder() {
   try {
-    await api.put('/api/reminders', { enabled: reminderEnabled.value, language: locale.value })
+    await api.put('/api/reminders', { enabled: reminderEnabled.value, events_enabled: eventsMailEnabled.value, language: locale.value })
   } catch (e) {
     reminderEnabled.value = !reminderEnabled.value
     showError(e)
@@ -684,6 +686,13 @@ onBeforeUnmount(() => {
           <span>
             <span class="block text-sm font-medium text-slate-800">{{ t('reminders.label') }}</span>
             <span class="block text-xs text-slate-500">{{ t('reminders.hint') }}</span>
+          </span>
+        </label>
+        <label v-if="reminderReady" class="bg-surface rounded-xl shadow p-4 flex items-start gap-3 cursor-pointer">
+          <input v-model="eventsMailEnabled" @change="saveReminder" type="checkbox" class="mt-1 h-4 w-4" />
+          <span>
+            <span class="block text-sm font-medium text-slate-800">{{ t('reminders.eventsLabel') }}</span>
+            <span class="block text-xs text-slate-500">{{ t('reminders.eventsHint') }}</span>
           </span>
         </label>
       </div>

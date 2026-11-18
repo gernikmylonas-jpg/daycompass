@@ -5,6 +5,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.application.services.wallpapers import BY_ID, CATALOG, POINTS_PER_NUGGET
+from app.application.schemas import BadgeInfo
+from app.application.services.badges import award_badges
 from app.domain.models import QuestReward, User, WallpaperUnlock
 from app.infrastructure.database import get_db
 from app.infrastructure.security import get_current_user_id
@@ -49,5 +51,6 @@ def unlock_wallpaper(wallpaper_id: str, user_id: str = Depends(get_current_user_
     if overview(db, user_id)["balance"] < item["cost"]:
         raise HTTPException(status_code=422, detail="Not enough nuggets")
     db.add(WallpaperUnlock(user_id=user_id, wallpaper_id=wallpaper_id, cost=item["cost"], unlocked_at=datetime.utcnow()))
+    new_badges = award_badges(db, user_id)
     db.commit()
-    return overview(db, user_id)
+    return {**overview(db, user_id), "new_badges": [BadgeInfo.model_validate(b).model_dump() for b in new_badges]}

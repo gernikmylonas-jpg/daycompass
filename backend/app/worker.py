@@ -6,6 +6,7 @@ from app.infrastructure.database import SessionLocal
 from app.application.services.reminders import send_daily_reminders
 from app.application.services.maintenance import nightly_recalculation
 from app.application.services.event_mail import send_event_mails
+from app.application.services.push import send_push_reminders
 
 celery_app = Celery("daycompass", broker=settings.redis_url, backend=settings.redis_url)
 celery_app.conf.update(
@@ -17,6 +18,10 @@ celery_app.conf.update(
     beat_schedule={
         "daily-checkin-reminders": {
             "task": "daycompass.send_daily_reminders",
+            "schedule": crontab(hour=settings.reminder_hour, minute=settings.reminder_minute),
+        },
+        "push-habit-reminders": {
+            "task": "daycompass.send_push_reminders",
             "schedule": crontab(hour=settings.reminder_hour, minute=settings.reminder_minute),
         },
         "calendar-notes-mail": {
@@ -47,3 +52,9 @@ def nightly_recalculation_task() -> dict:
 def send_event_mails_task() -> dict:
     with SessionLocal() as db:
         return send_event_mails(db)
+
+
+@celery_app.task(name="daycompass.send_push_reminders")
+def send_push_reminders_task() -> dict:
+    with SessionLocal() as db:
+        return send_push_reminders(db)
