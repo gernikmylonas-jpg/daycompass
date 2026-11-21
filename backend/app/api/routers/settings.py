@@ -22,7 +22,7 @@ def get_settings(user_id: str = Depends(get_current_user_id), db: Session = Depe
         return SettingsResponse(**DEFAULTS.model_dump(), saved=False)
     return SettingsResponse(
         theme=row.theme, mode=row.mode, needle_cursor=row.needle_cursor, language=row.language,
-        mood_style=row.mood_style, depth_3d=row.depth_3d, lid_open=row.lid_open, calendar_prefs=row.calendar_prefs, wallpaper=row.wallpaper, wallpapers_on=row.wallpapers_on, quests_on=row.quests_on, brightness=row.brightness, saved=True,
+        mood_style=row.mood_style, depth_3d=row.depth_3d, lid_open=row.lid_open, calendar_prefs=row.calendar_prefs, wallpaper=row.wallpaper, wallpapers_on=row.wallpapers_on, quests_on=row.quests_on, tutorial_seen=row.tutorial_seen, brightness=row.brightness, saved=True,
     )
 
 
@@ -65,6 +65,7 @@ def put_settings(
     row.wallpaper = payload.wallpaper
     row.wallpapers_on = payload.wallpapers_on
     row.quests_on = payload.quests_on
+    row.tutorial_seen = payload.tutorial_seen
     row.brightness = payload.brightness
     row.updated_at = datetime.utcnow()
     db.commit()

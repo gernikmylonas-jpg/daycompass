@@ -214,6 +214,7 @@ class UserSettings(Base):
     wallpaper = Column(String, nullable=True)  # id of the chosen wallpaper (must be unlocked)
     wallpapers_on = Column(Boolean, nullable=False, default=False)
     quests_on = Column(Boolean, nullable=False, default=False)
+    tutorial_seen = Column(Boolean, nullable=False, default=False)  # the first-visit tour was finished or skipped
     calendar_prefs = Column(Text, nullable=True)  # JSON: which calendar layers are shown
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 

@@ -14,7 +14,15 @@
       "Bash(echo \"exit $?\")",
       "Bash(grep -n \"#### \\\\`backend/app/api/routers/habits.py\\\\`\" -A8 docs/hidden/HIDDEN_README.md)",
       "Bash(python export_conversation.py \"C:/Users/DELL/.claude/projects/c--Users-DELL-source-repos-daycompass/58bae0b1-da7f-4b15-9691-60acb1fda573.jsonl\" CONVERSATION_earlier.md)",
-      "Read(//c/Users/DELL/source/**)"
+      "Read(//c/Users/DELL/source/**)",
+      "Bash(curl -s -o /tmp/x/rdap.json -w \"HTTP %{http_code}\\\\n\" https://rdap.verisign.com/com/v1/domain/daycompass.com)",
+      "Bash(nslookup daycompass.com)",
+      "Bash(curl -s -o /tmp/x/r2.json -w \"%{http_code}\\\\n\" https://rdap.verisign.com/com/v1/domain/daycompassapp.com)",
+      "Bash(nslookup daycompassapp.com)",
+      "Bash(python \"C:/Users/DELL/AppData/Local/Temp/claude/da368a750f96051d/9edea67a-28ec-42e1-80ce-a85229497efa/scratchpad/tour_wire.py\")",
+      "Bash(venv/Scripts/python -m alembic revision --autogenerate -m \"tutorial seen\" --rev-id 0007)",
+      "Bash(powershell -c \"cd C:\\\\Users\\\\DELL\\\\source\\\\repos\\\\daycompass\\\\frontend; npx vue-tsc -b 2>&1 | Select-Object -First 15; npx vitest run 2>&1 | Select-Object -Last 14\")",
+      "Bash(python docs/hidden/export_conversation.py)"
     ]
   }
 }

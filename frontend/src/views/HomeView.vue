@@ -30,6 +30,7 @@ import MeditationPanel from '../components/MeditationPanel.vue'
 import HomeGuide, { type GuideItem } from '../components/HomeGuide.vue'
 import BadgeToast from '../components/BadgeToast.vue'
 import UserChip from '../components/UserChip.vue'
+import GuidedTour from '../components/GuidedTour.vue'
 import { useStreakStore } from '../stores/streak'
 import { useBadgesStore } from '../stores/badges'
 
@@ -226,6 +227,22 @@ function closePanel(restoreFocus: boolean) {
 }
 
 // ── guide: what each direction contains ──────────────────────────────────
+// ── the first-visit tour (new accounts only), and "start the tour" from the guide ──
+const showTour = ref(false)
+function startTour() {
+  guideOpen.value = false
+  if (openId.value) closePanel(false)
+  showTour.value = true
+}
+function endTour() {
+  showTour.value = false
+  settings.tutorialSeen = true // finished or skipped: do not show it again by itself
+}
+// a little after the compass has appeared (and the optional lid has opened)
+watch(() => settings.tutorialSeen, (seen) => {
+  if (seen === false) window.setTimeout(() => { if (settings.tutorialSeen === false) showTour.value = true }, 900)
+}, { immediate: true })
+
 const guideOpen = ref(false)
 const guideButton = ref<HTMLButtonElement | null>(null)
 
@@ -494,10 +511,11 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="min-h-[calc(100vh-3rem)] bg-page p-4 md:p-8">
+    <GuidedTour v-if="showTour" @close="endTour" />
     <div class="max-w-6xl mx-auto">
       <header class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <!-- the name opens a plain-language guide to the compass -->
-        <div class="relative" data-guide-root>
+        <div class="relative" data-guide-root data-tour="guide">
           <h1 class="text-2xl font-bold text-slate-800">
             <button ref="guideButton" type="button" @click.stop="toggleGuide"
               :aria-expanded="guideOpen" aria-controls="home-guide" :title="t('home.guide.open')"
@@ -507,12 +525,12 @@ onBeforeUnmount(() => {
               <span class="sr-only">{{ t('home.guide.open') }}</span>
             </button>
           </h1>
-          <HomeGuide v-if="guideOpen" id="home-guide" :title="t('home.guide.title')" :intro="t('home.guide.intro')"
+          <HomeGuide v-if="guideOpen" id="home-guide" @tour="startTour" :title="t('home.guide.title')" :intro="t('home.guide.intro')"
             :close-label="t('common.close')" :items="guideItems" @close="closeGuide" />
         </div>
 
         <nav class="flex flex-wrap items-center gap-x-4 gap-y-2" :aria-label="t('nav.label')">
-          <UserChip />
+          <span data-tour="chip"><UserChip /></span>
           <button @click="logout"
             class="bg-primary text-on-primary rounded-lg px-4 py-2 text-sm hover:bg-primary-hover">
             {{ t('nav.logout') }}
@@ -527,7 +545,7 @@ onBeforeUnmount(() => {
         :style="{ '--panel-inner': `${panelWidth - 1}rem`, '--cols': !openDirection ? '0px minmax(0,1fr) 0px'
           : panelSide === 'left' ? `${panelWidth}rem minmax(0,1fr) 0px` : `0px minmax(0,1fr) ${panelWidth}rem` }">
 
-        <section ref="dialEl" data-compass-target="main"
+        <section ref="dialEl" data-compass-target="main" data-tour="compass"
           class="relative z-10 aspect-square w-[min(100%,44rem,calc(100vh-10rem))] min-w-64 mx-auto lg:col-start-2 lg:row-start-1">
           <div class="dial-bezel" aria-hidden="true"></div>
           <div class="dial-body absolute inset-0 rounded-full bg-surface shadow-lg"></div>
@@ -536,7 +554,7 @@ onBeforeUnmount(() => {
           <CompassLid />
 
           <!-- centre symbol (different for every compass style): opens points & badges -->
-          <RouterLink to="/progress" :aria-label="`${t('home.centerLabel')}: ${auth.user?.total_points ?? 0}`"
+          <RouterLink to="/progress" data-tour="center" :aria-label="`${t('home.centerLabel')}: ${auth.user?.total_points ?? 0}`"
             :title="`${t('home.centerLabel')}: ${auth.user?.total_points ?? 0}`"
             class="absolute rounded-full bg-surface flex items-center justify-center"
             style="inset: 26%; border: 1px dashed var(--color-slate-400); box-shadow: inset 0 1px 6px rgb(0 0 0 / 0.1)">
@@ -545,7 +563,7 @@ onBeforeUnmount(() => {
             </div>
           </RouterLink>
 
-          <div v-for="d in directions" :key="d.id" class="absolute" :style="medallionStyle(d.angle)">
+          <div v-for="d in directions" :key="d.id" class="absolute" :data-tour="`dir-${d.id}`" :style="medallionStyle(d.angle)">
             <DirectionMedallion :ref="(el) => setMedallion(d.id, el)"
               :letter="t(`compass.${d.id}`)" :done="progressOf(d).done" :total="progressOf(d).total"
               :accent="d.accentVar" :label="directionLabel(d)" :north="d.id === 'n'"

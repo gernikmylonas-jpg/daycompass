@@ -220,6 +220,7 @@ class SettingsPayload(BaseModel):
     wallpaper: Optional[str] = None  # an unlocked wallpaper id
     wallpapers_on: bool = False
     quests_on: bool = False
+    tutorial_seen: bool = False
     calendar_prefs: Optional[str] = None  # JSON text, opaque to the server (max 2000 characters)
     lid_open: bool = False  # play the compass lid animation on the home screen
     brightness: int = 100  # lighting of the compass face, percent

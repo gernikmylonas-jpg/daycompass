@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 // Short, plain-language explanation of what each direction of the compass contains.
 export interface GuideItem {
@@ -12,8 +13,9 @@ export interface GuideItem {
 }
 
 defineProps<{ id: string; title: string; intro: string; closeLabel: string; items: GuideItem[] }>()
-defineEmits<{ close: [] }>()
+defineEmits<{ close: []; tour: [] }>()
 
+const { t } = useI18n()
 const closeBtn = ref<HTMLButtonElement | null>(null)
 onMounted(() => closeBtn.value?.focus())
 </script>
@@ -27,6 +29,7 @@ onMounted(() => closeBtn.value?.focus())
         class="w-7 h-7 inline-flex items-center justify-center rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100 shrink-0">✕</button>
     </div>
     <p class="text-sm text-slate-600">{{ intro }}</p>
+    <button type="button" @click="$emit('tour')" class="bg-primary text-on-primary rounded-lg px-4 py-2 text-sm hover:bg-primary-hover">▶ {{ t('tour.start') }}</button>
 
     <ul class="grid gap-2 sm:grid-cols-2">
       <li v-for="item in items" :key="item.id" class="flex items-start gap-3 rounded-lg p-2 hover:bg-slate-50">

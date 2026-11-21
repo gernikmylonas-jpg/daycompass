@@ -757,3 +757,11 @@ def test_period_tracking_cycles_predictions_and_privacy(user, other):
     assert user.delete(f"/api/cycle/day/{today}").status_code == 200
     export = user.get("/api/account/export").json()
     assert len(export["period_days"]) >= 14
+
+
+def test_the_tour_is_remembered_by_the_account(user):
+    base = {"theme": "classic", "mode": "light", "needle_cursor": True, "language": "en"}
+    assert user.get("/api/settings").json()["tutorial_seen"] is False and user.get("/api/settings").json()["saved"] is False  # a new account: show the tour
+    assert user.put("/api/settings", json={**base, "tutorial_seen": True}).json()["tutorial_seen"] is True
+    assert user.get("/api/settings").json()["tutorial_seen"] is True
+    assert user.put("/api/settings", json={**base, "tutorial_seen": False}).json()["tutorial_seen"] is False  # replaying it from the guide is up to the app

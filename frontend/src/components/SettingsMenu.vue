@@ -72,7 +72,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="root" class="relative">
+  <div ref="root" class="relative" data-tour="settings">
     <button ref="trigger" type="button" @click="open = !open"
       :aria-label="t('settings.title')" aria-haspopup="dialog" :aria-expanded="open" aria-controls="settings-panel"
       class="flex items-center gap-2 bg-surface border border-slate-400 rounded-lg px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 shadow-sm">
